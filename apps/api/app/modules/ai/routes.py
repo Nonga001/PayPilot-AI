@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from .groq_provider import GroqProvider
+
+from .service import extract
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -11,12 +12,5 @@ class ParsePaymentRequest(BaseModel):
 
 @router.post("/parse-payment")
 async def parse_payment(payload: ParsePaymentRequest):
-    """
-    Take a natural language payment request and return structured JSON.
-    """
-    try:
-        provider = GroqProvider()
-        result = await provider.extract_payment(payload.message)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"AI extraction failed: {str(e)}")
+    """Debug view of the raw extraction. Use /agent/analyze for the real flow."""
+    return await extract(payload.message)
