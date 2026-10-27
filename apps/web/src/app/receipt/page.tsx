@@ -9,7 +9,9 @@ import { Shell } from "@/components/shell";
 import { api, type ReceiptData } from "@/lib/api";
 
 function ReceiptLoader() {
-  const id = useSearchParams().get("id");
+  const params = useSearchParams();
+  const id = params.get("id");
+  const fresh = params.get("fresh") === "1";
   const [data, setData] = useState<ReceiptData | null>(null);
   const [error, setError] = useState<string | null>(id ? null : "No receipt selected.");
 
@@ -36,7 +38,7 @@ function ReceiptLoader() {
       </div>
     );
   }
-  return <Receipt data={data} />;
+  return <Receipt data={data} fresh={fresh} />;
 }
 
 export default function ReceiptPage() {

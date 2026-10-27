@@ -6,12 +6,12 @@ from . import store
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
-# Transactions are written only by /payments/capture-order, from PayPal's own capture
-# response. There is deliberately no POST here: the browser can't record or alter payments.
+# Transactions are written only by /payments/execute (Payouts) and /payments/capture-order (Checkout),
+# from PayPal's own responses. There is deliberately no POST here: the browser can't record payments.
 
 
 @router.get("")
-def list_recent(limit: int = Query(20, ge=1, le=100)):
+def list_recent(limit: int = Query(20, ge=1, le=500)):
     return {"transactions": store.list_transactions(limit)}
 
 

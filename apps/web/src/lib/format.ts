@@ -49,6 +49,47 @@ const EVENT_LABELS: Record<string, string> = {
   "capture.amount_mismatch": "Amount mismatch flagged",
   "payer.cancelled": "Cancelled on PayPal",
   "execution.refused": "Refused at execution",
+  "agent.answered": "Agent answered",
+  "payout.sent": "Payout sent",
+  "payout.failed": "Payout failed",
+  "payout.status_changed": "Payout status updated",
+  "invoice.sent": "PayPal invoice sent",
+  "invoice.failed": "Invoice failed",
+  "invoice.status_changed": "Invoice status updated",
+  "payee.added": "Payee added",
+  "payee.updated": "Payee changed",
+  "payee.removed": "Payee removed",
 };
 
 export const eventLabel = (e: string) => EVENT_LABELS[e] ?? e;
+
+const STATUS: Record<string, { label: string; tone: "ok" | "warn" | "bad" | "muted" }> = {
+  COMPLETED: { label: "Completed", tone: "ok" },
+  SUCCESS: { label: "Delivered", tone: "ok" },
+  PAID: { label: "Paid", tone: "ok" },
+  MARKED_AS_PAID: { label: "Marked paid", tone: "ok" },
+  UNCLAIMED: { label: "Awaiting claim", tone: "warn" },
+  PENDING: { label: "Pending", tone: "warn" },
+  PROCESSING: { label: "Processing", tone: "warn" },
+  ONHOLD: { label: "On hold", tone: "warn" },
+  SENT: { label: "Sent, unpaid", tone: "warn" },
+  UNPAID: { label: "Unpaid", tone: "warn" },
+  PARTIALLY_PAID: { label: "Part paid", tone: "warn" },
+  SCHEDULED: { label: "Scheduled", tone: "warn" },
+  DRAFT: { label: "Draft", tone: "muted" },
+  FAILED: { label: "Failed", tone: "bad" },
+  DENIED: { label: "Denied", tone: "bad" },
+  BLOCKED: { label: "Blocked", tone: "bad" },
+  RETURNED: { label: "Returned", tone: "bad" },
+  REFUNDED: { label: "Refunded", tone: "muted" },
+  CANCELLED: { label: "Cancelled", tone: "muted" },
+};
+
+export const statusInfo = (s: string | null | undefined) =>
+  STATUS[(s || "").toUpperCase()] ?? { label: s || "Unknown", tone: "muted" as const };
+
+export const RAIL_LABEL: Record<string, string> = {
+  payout: "PayPal Payouts",
+  checkout: "PayPal Checkout",
+  invoice: "PayPal Invoicing",
+};

@@ -56,6 +56,8 @@ class PolicyContext:
     paid_invoice: dict[str, Any] | None = None     # earlier completed payment with the same invoice number
     similar_recent: dict[str, Any] | None = None   # same recipient + amount within DUPLICATE_WINDOW_DAYS
     pending_invoice: dict[str, Any] | None = None  # another proposal for this invoice awaiting PayPal approval
+    payee: dict[str, Any] | None = None            # saved payee this payment resolves to
+    open_invoice: dict[str, Any] | None = None     # unpaid invoice already sent to this client for this amount
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -158,6 +160,23 @@ def evaluate(parsed: dict[str, Any], message: str, ctx: PolicyContext | None = N
         check("recipient_valid", "Recipient identified", True, "block",
               f"{recipient or email}" + (f" <{email}>" if email and recipient else ""))
 
+    # 7b. Saved payee: first payments to someone new get a human look
+    if recipient or email:
+        if ctx.payee:
+            check("payee_known", "Saved payee", True, "review",
+                  f"{ctx.payee['name']} is in your payees" + (f" ({ctx.payee.get('country')})" if ctx.payee.get("country") else ""))
+        else:
+            check("payee_known", "Saved payee", False, "review",
+                  f"{recipient or email} isn't in your saved payees. First payments to new people need a check")
+
+    # 7c. Where the PayPal email came from: your message or your payee list, never the AI's imagination
+    if email:
+        in_message = email.lower() in message.lower()
+        from_payee = bool(ctx.payee and (ctx.payee.get("paypal_email") or "").lower() == email.lower())
+        check("recipient_grounded", "Recipient email verified", in_message or from_payee, "block",
+              "Taken from your message" if in_message else "Taken from your saved payee" if from_payee
+              else f"{email} isn't in your message or your saved payees")
+
     # 8. Description
     description = str(parsed.get("description") or "")
     check("description_valid", "Purpose recorded", len(description) <= MAX_DESCRIPTION_LENGTH, "block",
@@ -193,6 +212,76 @@ def evaluate(parsed: dict[str, Any], message: str, ctx: PolicyContext | None = N
           f"AI confidence: {confidence}" if confidence in {"high", "medium"}
           else "The AI isn't sure it understood this request")
 
+    return _decide(checks)
+
+
+INVOICE_MAX = {cur: per_day * 5 for cur, (_, per_day) in LIMITS.items()}
+
+
+def evaluate_invoice(parsed: dict[str, Any], message: str, ctx: PolicyContext | None = None) -> dict[str, Any]:
+    """Rules for requesting money (sending a PayPal invoice). No spend limits: money comes in."""
+    ctx = ctx or PolicyContext()
+    checks: list[dict[str, Any]] = []
+
+    def check(id_: str, label: str, passed: bool, severity: str, detail: str) -> None:
+        checks.append({"id": id_, "label": label, "passed": passed, "severity": severity, "detail": detail})
+
+    hit = scan_injection(message)
+    check("injection_scan", "Prompt-injection scan", hit is None, "block",
+          f'Suspicious instruction found: "{hit}"' if hit else "No manipulation attempts found")
+
+    currency = str(parsed.get("currency") or "").upper()
+    amount = _dec(str(parsed.get("amount") or ""))
+    ok_amount = amount is not None and amount > 0 and amount == amount.quantize(Decimal("0.01"))
+    check("amount_valid", "Amount is valid", ok_amount, "block",
+          f"{amount:.2f} {currency}".strip() if ok_amount else "No valid amount was found")
+    if ok_amount:
+        explicit, bare = mentioned_amounts(message)
+        pool = explicit or bare
+        grounded = amount in pool if pool else False
+        check("amount_grounded", "Amount matches your message", grounded, "block" if pool else "review",
+              "The amount appears in your message, word for word" if grounded
+              else "The amount wasn't written as a number. Please confirm it" if not pool
+              else f"AI proposed {amount:.2f}, but your message says {', '.join(f'{a:.2f}' for a in sorted(pool))}")
+
+    if currency in LIMITS:
+        check("currency_supported", "Currency supported", True, "block", f"{currency} is supported by PayPal")
+        if ok_amount:
+            cap = INVOICE_MAX[currency]
+            check("invoice_cap", "Invoice size", amount <= cap, "block",
+                  f"Within the {cap:.2f} {currency} invoice cap" if amount <= cap
+                  else f"{amount:.2f} {currency} is over the {cap:.2f} {currency} invoice cap")
+    else:
+        check("currency_supported", "Currency supported", False, "block",
+              f"'{currency or 'none'}' is not allowed. Allowed: {', '.join(LIMITS)}")
+
+    email = str(parsed.get("recipient_email") or "").strip()
+    if not email:
+        check("recipient_valid", "Client email", False, "block", "PayPal needs the client's email to send an invoice")
+    elif not _EMAIL.match(email):
+        check("recipient_valid", "Client email", False, "block", f"'{email}' is not a valid email address")
+    else:
+        in_message = email.lower() in message.lower()
+        from_payee = bool(ctx.payee and (ctx.payee.get("paypal_email") or "").lower() == email.lower())
+        check("recipient_valid", "Client email", in_message or from_payee, "block",
+              f"{email} ({'from your message' if in_message else 'from your saved contacts'})" if in_message or from_payee
+              else f"{email} isn't in your message or your saved contacts")
+
+    if ctx.open_invoice:
+        o = ctx.open_invoice
+        check("duplicate_invoice", "No open invoice already", False, "review",
+              f"Invoice {o.get('invoice_number') or ''} for {o.get('amount')} {o.get('currency')} to this client is still {str(o.get('status', '')).lower()}")
+    elif email:
+        check("duplicate_invoice", "No open invoice already", True, "review", "No unpaid invoice to this client for this amount")
+
+    confidence = str(parsed.get("confidence") or "low").lower()
+    check("ai_confidence", "AI confidence", confidence in {"high", "medium"}, "review",
+          f"AI confidence: {confidence}" if confidence in {"high", "medium"} else "The AI isn't sure it understood this request")
+
+    return _decide(checks)
+
+
+def _decide(checks: list[dict[str, Any]]) -> dict[str, Any]:
     failed_block = [c for c in checks if not c["passed"] and c["severity"] == "block"]
     failed_review = [c for c in checks if not c["passed"] and c["severity"] == "review"]
     if failed_block:
@@ -201,17 +290,19 @@ def evaluate(parsed: dict[str, Any], message: str, ctx: PolicyContext | None = N
         decision, risk_level = "review", "medium"
     else:
         decision, risk_level = "approved", "low"
-    risk_score = min(100, 6 + 22 * len(failed_review) + 45 * len(failed_block))
-
     return {
         "decision": decision,
         "risk_level": risk_level,
-        "risk_score": risk_score,
+        "risk_score": min(100, 6 + 22 * len(failed_review) + 45 * len(failed_block)),
         "reasons": [c["detail"] for c in failed_block + failed_review],
         "checks": checks,
         "passed": sum(c["passed"] for c in checks),
         "total": len(checks),
     }
+
+
+def evaluate_for(kind: str, parsed: dict[str, Any], message: str, ctx: PolicyContext | None = None) -> dict[str, Any]:
+    return evaluate_invoice(parsed, message, ctx) if kind == "invoice" else evaluate(parsed, message, ctx)
 
 
 def limits_view() -> dict[str, Any]:

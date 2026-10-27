@@ -21,6 +21,10 @@ GROQ_MODEL = _env("GROQ_MODEL", "openai/gpt-oss-20b")
 AI_TIMEOUT_SECONDS = float(_env("AI_TIMEOUT_SECONDS", "20"))
 
 FRONTEND_URL = _env("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+# Extra allowed browser origins (comma separated), e.g. your Render web URL.
+CORS_ORIGINS = [o.strip().rstrip("/") for o in _env("CORS_ORIGINS").split(",") if o.strip()]
+
+BUSINESS_NAME = _env("BUSINESS_NAME", "PayPilot Demo Business")
 
 # SQLite file. No database server needed; swap for Postgres later via the store modules.
 DB_PATH = Path(_env("PAYPILOT_DB_PATH", str(API_DIR / "data" / "paypilot.db")))

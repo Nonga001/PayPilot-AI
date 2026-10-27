@@ -77,7 +77,59 @@ CREATE TABLE IF NOT EXISTS audit_events (
     hash        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_audit_proposal ON audit_events(proposal_id);
+
+CREATE TABLE IF NOT EXISTS payees (
+    id               TEXT PRIMARY KEY,
+    name             TEXT NOT NULL,
+    name_norm        TEXT NOT NULL UNIQUE,
+    aliases          TEXT NOT NULL DEFAULT '',
+    paypal_email     TEXT,
+    country          TEXT,
+    default_currency TEXT,
+    notes            TEXT,
+    created_at       TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS invoices (
+    id                TEXT PRIMARY KEY,
+    proposal_id       TEXT NOT NULL REFERENCES proposals(id),
+    paypal_invoice_id TEXT UNIQUE,
+    invoice_number    TEXT,
+    status            TEXT NOT NULL,
+    amount            TEXT NOT NULL,
+    currency          TEXT NOT NULL,
+    recipient         TEXT,
+    recipient_email   TEXT NOT NULL,
+    description       TEXT,
+    payer_view_url    TEXT,
+    audit_hash        TEXT,
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_invoices_email ON invoices(recipient_email);
 """
+
+# Columns added after the first release. init() adds any that an older database is missing.
+MIGRATIONS: dict[str, dict[str, str]] = {
+    "proposals": {
+        "kind": "TEXT NOT NULL DEFAULT 'payment'",  # payment | invoice | answer
+        "rail": "TEXT",                              # payout | checkout | invoice
+        "payee_id": "TEXT",
+        "agent_json": "TEXT",
+    },
+    "transactions": {
+        "rail": "TEXT NOT NULL DEFAULT 'checkout'",
+        "payout_item_id": "TEXT",
+    },
+}
+
+# Demo suppliers. Swap the emails for your own PayPal sandbox accounts on the Payees page.
+SEED_PAYEES = [
+    ("Acme Supplies", "acme, acme supplies ltd", "acme.supplies@example.com", "US", "USD", "Packaging supplier"),
+    ("Bright Print Co", "bright print, brightprint", "orders@brightprint.example.com", "GB", "GBP", "Printing"),
+    ("Kamau Logistics", "kamau, kamau logistics ltd", "pay@kamaulogistics.example.com", "KE", "USD", "Delivery partner, Nairobi"),
+    ("Maria Lopez Design", "maria lopez, maria", "maria.lopez@example.com", "ES", "EUR", "Freelance designer"),
+]
 
 
 def now_iso() -> str:
@@ -116,7 +168,29 @@ def write() -> Iterator[sqlite3.Connection]:
 
 
 def init() -> None:
-    conn().executescript(SCHEMA)
+    c = conn()
+    statements = [s.strip() for s in SCHEMA.split(";") if s.strip()]
+    for stmt in statements:  # tables first
+        if stmt.upper().startswith("CREATE TABLE"):
+            c.execute(stmt)
+    for table, cols in MIGRATIONS.items():  # then columns added since the first release
+        have = {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
+        for col, ddl in cols.items():
+            if col not in have:
+                c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+    for stmt in statements:  # indexes last, once every column exists
+        if stmt.upper().startswith("CREATE INDEX"):
+            c.execute(stmt)
+    if c.execute("SELECT COUNT(*) AS n FROM payees").fetchone()["n"] == 0:
+        import re
+        import uuid
+        for name, aliases, email, country, cur, notes in SEED_PAYEES:
+            c.execute(
+                "INSERT INTO payees (id, name, name_norm, aliases, paypal_email, country, default_currency, notes, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (f"payee_{uuid.uuid4().hex[:16]}", name, re.sub(r"[^a-z0-9@.]+", " ", name.lower()).strip(),
+                 aliases, email, country, cur, notes, now_iso()),
+            )
 
 
 def row(r: sqlite3.Row | None) -> dict | None:

@@ -1,19 +1,32 @@
 "use client";
 
-import { Bug, CircleHelp, Copy, Loader2, PackageCheck, ScanSearch, TrendingUp, type LucideIcon } from "lucide-react";
+import {
+  Bug,
+  CircleHelp,
+  Copy,
+  Loader2,
+  MessageCircleQuestion,
+  PackageCheck,
+  ReceiptText,
+  ScanSearch,
+  TrendingUp,
+  type LucideIcon,
+} from "lucide-react";
 import { useRef } from "react";
 
 const EXAMPLES: { label: string; icon: LucideIcon; text: string }[] = [
   {
-    label: "Supplier invoice",
+    label: "Pay a supplier",
     icon: PackageCheck,
     text: "Pay my supplier Acme Supplies $45 for the packaging order, invoice INV-1042",
   },
+  { label: "Same invoice again", icon: Copy, text: "Pay Acme Supplies $45 for invoice INV-1042" },
   {
-    label: "Same invoice again",
-    icon: Copy,
-    text: "Pay Acme Supplies $45 for invoice INV-1042",
+    label: "Invoice a client",
+    icon: ReceiptText,
+    text: "Invoice Maria Lopez (maria.lopez@example.com) €250 for the logo design",
   },
+  { label: "Ask a question", icon: MessageCircleQuestion, text: "Have I already paid Kamau Logistics this week?" },
   {
     label: "Hidden instruction",
     icon: Bug,
@@ -43,10 +56,10 @@ export function Composer({
       }}
     >
       <label htmlFor="instruction" className="font-display text-2xl font-semibold tracking-tight sm:text-[1.75rem]">
-        Who do you need to pay?
+        What do you need done?
       </label>
       <p className="mt-1 text-[15px] text-muted">
-        Write it the way you&apos;d tell an assistant. PayPilot checks it before any money moves.
+        Pay a supplier, invoice a client, or ask about your payments. PayPilot checks everything before money moves.
       </p>
 
       <div className="relative mt-5 overflow-hidden rounded-2xl bg-cloud/60 ring-1 ring-line focus-within:ring-2 focus-within:ring-ai">
@@ -67,14 +80,14 @@ export function Composer({
           className="block w-full resize-none bg-transparent px-5 pb-16 pt-4 text-lg leading-relaxed text-ink placeholder:text-faint focus:outline-none"
         />
         <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3">
-          <span className="hidden text-xs text-faint sm:inline">Ctrl + Enter to check</span>
+          <span className="hidden text-xs text-faint sm:inline">Ctrl + Enter to send</span>
           <button
             type="submit"
             disabled={busy || !value.trim()}
             className="ml-auto inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#22324d] disabled:cursor-not-allowed disabled:bg-faint"
           >
             {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <ScanSearch className="size-4" aria-hidden />}
-            {busy ? "Checking…" : "Check payment"}
+            {busy ? "Working…" : "Ask PayPilot"}
           </button>
         </div>
         {busy && (

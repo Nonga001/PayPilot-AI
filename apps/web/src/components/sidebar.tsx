@@ -1,7 +1,7 @@
-import { ChevronRight, Link2, Link2Off, ReceiptText, Wallet } from "lucide-react";
+import { ChevronRight, FileText, Link2, Link2Off, ReceiptText, Wallet } from "lucide-react";
 import Link from "next/link";
 import type { Dashboard } from "@/lib/api";
-import { eventLabel, money, shortHash, when } from "@/lib/format";
+import { eventLabel, money, shortHash, statusInfo, when } from "@/lib/format";
 
 function SectionTitle({ icon: Icon, children }: { icon: typeof Wallet; children: React.ReactNode }) {
   return (
@@ -81,7 +81,33 @@ export function Sidebar({ data, error }: { data: Dashboard | null; error: string
             ))}
           </ul>
         )}
+        <Link href="/ledger" className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-ai hover:underline">
+          Open the full ledger
+          <ChevronRight className="size-3.5" aria-hidden />
+        </Link>
       </section>
+
+      {data.invoices?.length > 0 && (
+        <section>
+          <SectionTitle icon={FileText}>Waiting to be paid</SectionTitle>
+          <ul className="mt-3 divide-y divide-line">
+            {data.invoices.map((i) => {
+              const st = statusInfo(i.status);
+              return (
+                <li key={i.id} className="flex items-center gap-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[15px] font-medium">{i.recipient || i.recipient_email}</div>
+                    <div className={`text-xs ${st.tone === "ok" ? "text-ok" : st.tone === "warn" ? "text-warn" : "text-faint"}`}>
+                      {st.label}, {when(i.created_at)}
+                    </div>
+                  </div>
+                  <span className="tabular text-[15px] font-semibold">{money(i.amount, i.currency)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       <section>
         <SectionTitle icon={data.audit.valid ? Link2 : Link2Off}>Audit trail</SectionTitle>

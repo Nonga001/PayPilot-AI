@@ -30,14 +30,59 @@ export interface Payment {
   confidence: "high" | "medium" | "low";
 }
 
+export type Kind = "payment" | "invoice" | "answer";
+export type Rail = "payout" | "checkout" | "invoice";
+
+export interface AgentStep {
+  tool: string;
+  label: string;
+  args: Record<string, unknown>;
+  summary: string;
+  ms: number;
+  ok: boolean;
+  auto: boolean;
+}
+
+export interface Payee {
+  id: string;
+  name: string;
+  paypal_email: string | null;
+  country: string | null;
+  default_currency: string | null;
+  aliases: string[];
+  notes: string | null;
+  created_at: string;
+}
+
+export interface Invoice {
+  id: string;
+  proposal_id: string;
+  paypal_invoice_id: string | null;
+  invoice_number: string | null;
+  status: string;
+  amount: string;
+  currency: string;
+  recipient: string | null;
+  recipient_email: string;
+  description: string | null;
+  payer_view_url: string | null;
+  audit_hash: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Proposal {
   id: string;
-  status: "proposed" | "blocked" | "awaiting_payer" | "completed" | "cancelled" | "failed";
+  kind: Kind;
+  rail: Rail | null;
+  payee: Payee | null;
+  agent: { steps: AgentStep[]; answer: string | null; fallback_reason?: string | null };
+  status: "proposed" | "blocked" | "awaiting_payer" | "executing" | "completed" | "cancelled" | "failed" | "answered";
   created_at: string;
   message: string;
   payment: Payment;
   ai: { source: "groq" | "rules"; model: string; latency_ms: number; fallback_reason?: string | null };
-  policy: Policy;
+  policy: Policy | null;
   explanation: string;
   order_id: string | null;
   approval_url: string | null;
@@ -66,6 +111,8 @@ export interface Transaction {
   amount_verified: boolean;
   audit_hash: string | null;
   created_at: string;
+  rail?: Rail;
+  payout_item_id?: string | null;
 }
 
 export interface AuditEvent {
@@ -91,6 +138,8 @@ export interface Dashboard {
   limits: Record<string, { per_transaction: string; per_day: string }>;
   stats: { analyzed: number; blocked: number; review: number; paid: number };
   transactions: Transaction[];
+  invoices: Invoice[];
+  payees: number;
   audit: { valid: boolean; count: number; broken_at: number | null; head: string; events: AuditEvent[] };
   environment: { paypal: string; ai_model: string };
 }
@@ -126,6 +175,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 const post = <T,>(path: string, body: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(body) });
 
+export type ExecuteResult =
+  | { next: "redirect"; order_id: string; approval_url: string; reused: boolean }
+  | { next: "receipt"; transaction: Transaction }
+  | { next: "invoice"; invoice: Invoice };
+
 export const api = {
   analyze: (message: string) => post<Proposal>("/agent/analyze", { message }),
   createOrder: (proposal_id: string, acknowledge_risks: boolean) =>
@@ -136,6 +190,16 @@ export const api = {
   capture: (order_id: string) =>
     post<{ transaction: Transaction; already_captured: boolean }>("/payments/capture-order", { order_id }),
   cancel: (order_id: string) => post<{ proposal_id: string; status: string }>("/payments/cancel", { order_id }),
+  execute: (proposal_id: string, acknowledge_risks: boolean) =>
+    post<ExecuteResult>("/payments/execute", { proposal_id, acknowledge_risks }),
+  refresh: (key: string) =>
+    post<{ transaction?: Transaction; invoice?: Invoice }>(`/payments/refresh/${encodeURIComponent(key)}`, {}),
   dashboard: () => request<Dashboard>("/dashboard"),
+  transactions: (limit = 500) => request<{ transactions: Transaction[] }>(`/transactions?limit=${limit}`),
+  invoices: () => request<{ invoices: Invoice[] }>("/invoices?limit=500"),
+  payees: () => request<{ payees: Payee[] }>("/payees"),
+  savePayee: (p: { name: string; paypal_email: string | null; country: string | null; default_currency: string | null; aliases?: string[]; notes?: string | null }) =>
+    post<{ payee: Payee }>("/payees", p),
+  deletePayee: (id: string) => request<{ deleted: boolean }>(`/payees/${encodeURIComponent(id)}`, { method: "DELETE" }),
   receipt: (key: string) => request<ReceiptData>(`/transactions/${encodeURIComponent(key)}`),
 };

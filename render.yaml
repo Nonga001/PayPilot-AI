@@ -1,0 +1,43 @@
+# Render Blueprint: Dashboard > New > Blueprint > pick this repo.
+# Secrets (sync: false) are asked for once in the dashboard and never stored in git.
+services:
+  - type: web
+    name: paypilot-api
+    runtime: python
+    plan: free
+    region: frankfurt
+    rootDir: apps/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: PAYPAL_API_BASE
+        value: https://api-m.sandbox.paypal.com
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-20b
+      - key: BUSINESS_NAME
+        value: PayPilot Demo Business
+      - key: FRONTEND_URL
+        value: https://paypilot-web.onrender.com
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+
+  - type: web
+    name: paypilot-web
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: apps/web
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_PUBLIC_API_URL
+        value: https://paypilot-api.onrender.com

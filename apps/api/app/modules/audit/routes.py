@@ -36,6 +36,8 @@ def dashboard():
         "limits": limits_view(),
         "stats": store.stats_today(),
         "transactions": store.list_transactions(6),
+        "invoices": store.list_invoices(4),
+        "payees": len(store.list_payees()),
         "audit": {**audit.verify(), "events": audit.recent(8)},
         "environment": {
             "paypal": "sandbox" if "sandbox" in config.PAYPAL_API_BASE else "live",

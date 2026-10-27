@@ -1,20 +1,24 @@
 "use client";
 
 import { CircleX } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Composer } from "@/components/composer";
+import { InvoiceSent } from "@/components/invoice-sent";
 import { Pipeline } from "@/components/pipeline";
-import { ProposalView } from "@/components/proposal-view";
+import { AnswerView, ProposalView } from "@/components/proposal-view";
 import { Shell } from "@/components/shell";
 import { Sidebar } from "@/components/sidebar";
-import { api, type Dashboard, type Proposal } from "@/lib/api";
+import { api, type Dashboard, type Invoice, type Proposal } from "@/lib/api";
 
-type Phase = "idle" | "analyzing" | "proposed" | "paying";
+type Phase = "idle" | "analyzing" | "proposed" | "paying" | "sent";
 
 export default function Home() {
+  const router = useRouter();
   const [message, setMessage] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [proposal, setProposal] = useState<Proposal | null>(null);
+  const [sentInvoice, setSentInvoice] = useState<Invoice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dash, setDash] = useState<Dashboard | null>(null);
   const [dashError, setDashError] = useState<string | null>(null);
@@ -44,6 +48,7 @@ export default function Home() {
     setPhase("analyzing");
     setError(null);
     setProposal(null);
+    setSentInvoice(null);
     try {
       const p = await api.analyze(message);
       setProposal(p);
@@ -61,8 +66,16 @@ export default function Home() {
     setPhase("paying");
     setError(null);
     try {
-      const order = await api.createOrder(proposal.id, acknowledge);
-      window.location.assign(order.approval_url);
+      const r = await api.execute(proposal.id, acknowledge);
+      if (r.next === "redirect") {
+        window.location.assign(r.approval_url);
+      } else if (r.next === "receipt") {
+        router.push(`/receipt?id=${encodeURIComponent(r.transaction.receipt_number)}&fresh=1`);
+      } else {
+        setSentInvoice(r.invoice);
+        setPhase("sent");
+        refresh();
+      }
     } catch (e) {
       setError((e as Error).message);
       setPhase("proposed");
@@ -70,16 +83,29 @@ export default function Home() {
     }
   }
 
-  function edit() {
+  function reset() {
     setProposal(null);
+    setSentInvoice(null);
     setPhase("idle");
     setError(null);
     document.getElementById("instruction")?.focus();
   }
 
-  const decision = proposal?.policy.decision;
+  const decision = proposal?.policy?.decision;
   const stage =
-    phase === "analyzing" ? 0 : phase === "paying" ? 4 : proposal ? (decision === "blocked" ? 1 : 3) : 0;
+    phase === "analyzing"
+      ? 0
+      : phase === "paying"
+        ? 4
+        : phase === "sent"
+          ? 6
+          : proposal?.kind === "answer"
+            ? 2
+            : proposal
+              ? decision === "blocked"
+                ? 1
+                : 3
+              : 0;
 
   return (
     <Shell model={dash?.environment.ai_model}>
@@ -101,7 +127,13 @@ export default function Home() {
 
             {proposal && (
               <div ref={resultRef} className="scroll-mt-6 border-t border-line pt-9">
-                <ProposalView key={proposal.id} proposal={proposal} onApprove={approve} onEdit={edit} paying={phase === "paying"} />
+                {sentInvoice ? (
+                  <InvoiceSent invoice={sentInvoice} onDone={reset} />
+                ) : proposal.kind === "answer" ? (
+                  <AnswerView proposal={proposal} onEdit={reset} />
+                ) : (
+                  <ProposalView key={proposal.id} proposal={proposal} onApprove={approve} onEdit={reset} paying={phase === "paying"} />
+                )}
               </div>
             )}
           </div>

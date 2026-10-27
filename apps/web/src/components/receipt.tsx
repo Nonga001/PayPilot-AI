@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowLeft, BadgeCheck, CircleCheckBig, Printer, TriangleAlert } from "lucide-react";
+import { ArrowLeft, BadgeCheck, CircleCheckBig, Loader2, Printer, RefreshCw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
-import type { ReceiptData } from "@/lib/api";
-import { dateTime, eventLabel, money, shortHash } from "@/lib/format";
+import { useState } from "react";
+import { api, type ReceiptData } from "@/lib/api";
+import { RAIL_LABEL, dateTime, eventLabel, money, shortHash, statusInfo } from "@/lib/format";
 import { Logo } from "./ui";
 
 function Row({ label, value, mono = false }: { label: string; value: React.ReactNode; mono?: boolean }) {
@@ -15,8 +16,24 @@ function Row({ label, value, mono = false }: { label: string; value: React.React
   );
 }
 
-export function Receipt({ data, fresh = false }: { data: ReceiptData; fresh?: boolean }) {
+const WAITING = new Set(["PENDING", "UNCLAIMED", "ONHOLD", "PROCESSING"]);
+
+export function Receipt({ data: initial, fresh = false }: { data: ReceiptData; fresh?: boolean }) {
+  const [data, setData] = useState(initial);
+  const [checking, setChecking] = useState(false);
   const t = data.transaction;
+  const payout = t.rail === "payout";
+  const st = statusInfo(t.status);
+
+  async function recheck() {
+    setChecking(true);
+    try {
+      await api.refresh(t.id);
+      setData(await api.receipt(t.receipt_number));
+    } finally {
+      setChecking(false);
+    }
+  }
   const approval = data.audit.find((e) => e.event === "human.approved");
   const acknowledged = Boolean(approval?.data?.acknowledged_risks);
 
@@ -50,7 +67,7 @@ export function Receipt({ data, fresh = false }: { data: ReceiptData; fresh?: bo
           {fresh && (
             <p className="mb-2 flex items-center gap-2 text-sm font-medium text-ok">
               <CircleCheckBig className="size-4" aria-hidden />
-              Payment complete
+              {payout ? "Payment sent" : "Payment complete"}
             </p>
           )}
           <div className="font-display tabular text-5xl font-semibold tracking-tight">{money(t.amount, t.currency)}</div>
@@ -69,13 +86,38 @@ export function Receipt({ data, fresh = false }: { data: ReceiptData; fresh?: bo
         <dl className="mt-8 divide-y divide-line border-y border-line">
           <Row label="Purpose" value={t.description} />
           <Row label="Invoice" value={t.invoice_number} />
-          <Row label="Status" value={t.status === "COMPLETED" ? "Completed" : t.status} />
+          <Row
+            label="Status"
+            value={
+              <span className="inline-flex items-center gap-2">
+                {st.label}
+                {WAITING.has(t.status) && (
+                  <button
+                    type="button"
+                    onClick={recheck}
+                    disabled={checking}
+                    className="no-print inline-flex items-center gap-1 rounded-lg bg-cloud px-2 py-0.5 text-xs font-medium text-muted ring-1 ring-line hover:text-ink"
+                  >
+                    {checking ? <Loader2 className="size-3 animate-spin" aria-hidden /> : <RefreshCw className="size-3" aria-hidden />}
+                    Check PayPal
+                  </button>
+                )}
+              </span>
+            }
+          />
+          {t.status === "UNCLAIMED" && (
+            <p className="py-2 text-xs text-muted">
+              PayPal sent it, but this email has no PayPal account yet. The recipient has 30 days to claim it, or it comes back.
+            </p>
+          )}
+          <Row label="Sent with" value={RAIL_LABEL[t.rail ?? "checkout"]} />
+          {t.recipient_email && <Row label="Recipient PayPal" value={t.recipient_email} />}
           <Row label="Paid from" value={[t.payer_name, t.payer_email].filter(Boolean).join(", ")} />
           {t.paypal_fee && <Row label="PayPal fee" value={money(t.paypal_fee, t.currency)} />}
-          {t.net_amount && <Row label="Net to recipient" value={money(t.net_amount, t.currency)} />}
+          {t.net_amount && <Row label="Net received" value={money(t.net_amount, t.currency)} />}
           <Row label="Approved by" value={acknowledged ? "You, after reviewing flagged details" : "You, all checks passed"} />
-          <Row label="PayPal order" value={t.order_id} mono />
-          <Row label="PayPal capture" value={t.capture_id} mono />
+          <Row label={payout ? "Payout batch" : "PayPal order"} value={t.order_id} mono />
+          <Row label={payout ? "PayPal transaction" : "PayPal capture"} value={t.capture_id} mono />
         </dl>
 
         {data.proposal && (

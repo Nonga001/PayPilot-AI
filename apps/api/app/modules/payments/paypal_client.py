@@ -100,6 +100,76 @@ class PayPalClient:
     def get_order(self, order_id: str) -> dict[str, Any]:
         return self._call("GET", f"/v2/checkout/orders/{order_id}")
 
+    # ---------------------------------------------------------------- Payouts
+    def create_payout(self, *, batch_id: str, item_id: str, amount: str, currency: str,
+                      receiver_email: str, note: str) -> dict[str, Any]:
+        """Send money from the business balance to a PayPal email (supplier payment)."""
+        payload = {
+            "sender_batch_header": {
+                "sender_batch_id": batch_id[:127],
+                "email_subject": "You have a payment from PayPilot",
+                "email_message": (note or "Payment sent with PayPilot")[:1000],
+            },
+            "items": [{
+                "recipient_type": "EMAIL",
+                "receiver": receiver_email,
+                "amount": {"value": amount, "currency": currency},
+                "note": (note or "Payment sent with PayPilot")[:4000],
+                "sender_item_id": item_id[:63],
+                "notification_language": "en-US",
+            }],
+        }
+        return self._call("POST", "/v1/payments/payouts", payload, request_id=batch_id)
+
+    def get_payout(self, payout_batch_id: str) -> dict[str, Any]:
+        return self._call("GET", f"/v1/payments/payouts/{payout_batch_id}")
+
+    # -------------------------------------------------------------- Invoicing
+    def search_invoices(self, *, recipient_email: str | None = None, invoice_number: str | None = None,
+                        status: list[str] | None = None, page_size: int = 10) -> dict[str, Any]:
+        body: dict[str, Any] = {}
+        if recipient_email:
+            body["recipient_email"] = recipient_email
+        if invoice_number:
+            body["invoice_number"] = invoice_number
+        if status:
+            body["status"] = status
+        return self._call("POST", f"/v2/invoicing/search-invoices?page_size={page_size}&total_required=true", body)
+
+    def create_invoice(self, *, amount: str, currency: str, recipient_name: str, recipient_email: str,
+                       description: str, reference: str, request_id: str) -> dict[str, Any]:
+        given, _, surname = (recipient_name or "").strip().partition(" ")
+        billing: dict[str, Any] = {"email_address": recipient_email}
+        if given:
+            billing["name"] = {"given_name": given[:140], **({"surname": surname[:140]} if surname else {})}
+        payload = {
+            "detail": {
+                "currency_code": currency,
+                "reference": reference[:120],
+                "note": "Thank you for your business.",
+                "memo": f"Created by PayPilot ({reference})"[:500],
+                "payment_term": {"term_type": "NET_10"},
+            },
+            "invoicer": {"business_name": config.BUSINESS_NAME[:300]},
+            "primary_recipients": [{"billing_info": billing}],
+            "items": [{
+                "name": (description or "Services")[:200],
+                "quantity": "1",
+                "unit_amount": {"currency_code": currency, "value": amount},
+                "unit_of_measure": "QUANTITY",
+            }],
+            "configuration": {"allow_tip": False, "tax_inclusive": False},
+        }
+        return self._call("POST", "/v2/invoicing/invoices", payload, request_id=request_id)
+
+    def send_invoice(self, invoice_id: str) -> dict[str, Any]:
+        return self._call("POST", f"/v2/invoicing/invoices/{invoice_id}/send",
+                          {"send_to_invoicer": False, "send_to_recipient": True},
+                          request_id=f"send-{invoice_id}")
+
+    def get_invoice(self, invoice_id: str) -> dict[str, Any]:
+        return self._call("GET", f"/v2/invoicing/invoices/{invoice_id}")
+
 
 _client: PayPalClient | None = None
 _client_lock = threading.Lock()
