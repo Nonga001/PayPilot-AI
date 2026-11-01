@@ -1,5 +1,7 @@
 # Render Blueprint: Dashboard > New > Blueprint > pick this repo.
 # Secrets (sync: false) are asked for once in the dashboard and never stored in git.
+# Values written here (value:) win over the dashboard: Render resets them on every Blueprint sync.
+# If a service URL changes, update it here, not only in the dashboard.
 services:
   - type: web
     name: paypilot-api
@@ -20,7 +22,7 @@ services:
       - key: BUSINESS_NAME
         value: PayPilot Demo Business
       - key: FRONTEND_URL
-        value: https://paypilot-web.onrender.com
+        value: https://paypilot-web-qxy9.onrender.com
       - key: PAYPAL_CLIENT_ID
         sync: false
       - key: PAYPAL_CLIENT_SECRET
@@ -42,4 +44,4 @@ services:
       - key: NODE_VERSION
         value: "22"
       - key: NEXT_PUBLIC_API_URL
-        value: https://paypilot-api.onrender.com
+        value: https://paypilot-api-i6vz.onrender.com
