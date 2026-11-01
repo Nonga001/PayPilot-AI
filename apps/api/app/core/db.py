@@ -189,7 +189,7 @@ def init() -> None:
                 "INSERT INTO payees (id, name, name_norm, aliases, paypal_email, country, default_currency, notes, created_at) "
                 "VALUES (?,?,?,?,?,?,?,?,?)",
                 (f"payee_{uuid.uuid4().hex[:16]}", name, re.sub(r"[^a-z0-9@.]+", " ", name.lower()).strip(),
-                 aliases, email, country, cur, notes, now_iso()),
+                 aliases, config.DEMO_PAYEE_EMAIL or email, country, cur, notes, now_iso()),
             )
 
 

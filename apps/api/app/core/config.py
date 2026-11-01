@@ -26,5 +26,9 @@ CORS_ORIGINS = [o.strip().rstrip("/") for o in _env("CORS_ORIGINS").split(",") i
 
 BUSINESS_NAME = _env("BUSINESS_NAME", "PayPilot Demo Business")
 
+# Optional: a PayPal sandbox personal-account email given to the demo payees when the database
+# is created, so demo payouts are delivered (instead of "unclaimed") even after a fresh deploy.
+DEMO_PAYEE_EMAIL = _env("DEMO_PAYEE_EMAIL").lower()
+
 # SQLite file. No database server needed; swap for Postgres later via the store modules.
 DB_PATH = Path(_env("PAYPILOT_DB_PATH", str(API_DIR / "data" / "paypilot.db")))

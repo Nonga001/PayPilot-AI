@@ -396,3 +396,18 @@ def test_migrates_old_database(tmp_path):
         db.conn().close()
         db._local.conn = None
         config.DB_PATH = orig
+
+
+def test_demo_payee_email(tmp_path):
+    """DEMO_PAYEE_EMAIL replaces the example.com addresses on a fresh database."""
+    orig_path, orig_email = config.DB_PATH, config.DEMO_PAYEE_EMAIL
+    try:
+        config.DB_PATH, config.DEMO_PAYEE_EMAIL = tmp_path / "demo.db", "sb-demo@personal.example.com"
+        db._local.conn = None
+        db.init()
+        emails = {r["paypal_email"] for r in db.conn().execute("SELECT paypal_email FROM payees")}
+        assert emails == {"sb-demo@personal.example.com"}
+    finally:
+        db.conn().close()
+        db._local.conn = None
+        config.DB_PATH, config.DEMO_PAYEE_EMAIL = orig_path, orig_email
