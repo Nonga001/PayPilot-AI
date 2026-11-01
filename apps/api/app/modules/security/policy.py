@@ -177,6 +177,13 @@ def evaluate(parsed: dict[str, Any], message: str, ctx: PolicyContext | None = N
               "Taken from your message" if in_message else "Taken from your saved payee" if from_payee
               else f"{email} isn't in your message or your saved payees")
 
+    # 7d. Changed payment details: a known supplier asking to be paid somewhere new is the classic invoice fraud
+    saved = (ctx.payee or {}).get("paypal_email") or ""
+    if email and saved and email.lower() != saved.lower():
+        check("payee_email_changed", "Payment email matches payee", False, "review",
+              f"This pays {email}, but {ctx.payee['name']} is saved as {saved}. "
+              "Changed payment details are a common invoice scam: confirm with the supplier first")
+
     # 8. Description
     description = str(parsed.get("description") or "")
     check("description_valid", "Purpose recorded", len(description) <= MAX_DESCRIPTION_LENGTH, "block",

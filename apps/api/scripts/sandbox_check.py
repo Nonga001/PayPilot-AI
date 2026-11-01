@@ -91,6 +91,8 @@ def groq_checks() -> None:
     except Exception as e:
         line(BAD, f"List models: {e}")
         return
+    line(OK if config.VISION_MODEL in ids else WARN,
+         f"Vision model {config.VISION_MODEL} {'available (photo invoices work)' if config.VISION_MODEL in ids else 'NOT available: photo uploads off, PDFs still work. Set GROQ_VISION_MODEL'}")
     t = time.perf_counter()
     try:
         resp = client.chat.completions.create(

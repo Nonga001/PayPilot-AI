@@ -59,6 +59,8 @@ const EVENT_LABELS: Record<string, string> = {
   "payee.added": "Payee added",
   "payee.updated": "Payee changed",
   "payee.removed": "Payee removed",
+  "document.read": "Invoice file read",
+  "document.rejected": "Invoice file rejected",
 };
 
 export const eventLabel = (e: string) => EVENT_LABELS[e] ?? e;

@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 os.environ["PAYPILOT_DB_PATH"] = os.path.join(tempfile.mkdtemp(), "test.db")
 os.environ["GROQ_API_KEY"] = ""  # deterministic unless a test patches the agent
+os.environ["DEMO_PAYEE_EMAIL"] = ""  # tests expect the built-in demo emails, whatever your .env says
 
 import pytest
 from fastapi.testclient import TestClient
@@ -411,3 +412,77 @@ def test_demo_payee_email(tmp_path):
         db.conn().close()
         db._local.conn = None
         config.DB_PATH, config.DEMO_PAYEE_EMAIL = orig_path, orig_email
+
+
+# ---------------------------------------------------------- invoice upload
+SAMPLES = os.path.join(os.path.dirname(__file__), "..", "..", "web", "public", "samples")
+
+
+def _upload(client, name, data=None, ctype="application/pdf"):
+    if data is None:
+        with open(os.path.join(SAMPLES, name), "rb") as f:
+            data = f.read()
+    return client.post("/documents/read-invoice", files={"file": (name, data, ctype)})
+
+
+@pytest.mark.skipif(not os.path.isdir(SAMPLES), reason="sample invoices not present")
+def test_invoice_pdf_to_request_then_duplicate(client, monkeypatch):
+    r = _upload(client, "1-acme-invoice.pdf")
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["type"] == "pdf" and d["method"] == "rules" and not d["blocked"]
+    assert d["fields"]["amount"] == "128.50" and d["fields"]["invoice_number"] == "INV-2087"
+    assert d["request"] == "Pay Acme Supplies $128.50 for Packaging supplies, invoice INV-2087"
+    assert audit.recent(1)[0]["event"] == "document.read"
+
+    # the drafted sentence goes through the normal agent and rules, and pays the saved payee
+    # (no AI key in tests, so the backup parser reads it and asks for a human look)
+    p = analyze(client, d["request"])
+    assert p["policy"]["decision"] == "review" and p["rail"] == "payout"
+    assert p["payment"]["amount"] == "128.50" and p["payee"]["name"] == "Acme Supplies"
+    r = client.post("/payments/execute", json={"proposal_id": p["id"], "acknowledge_risks": True}).json()
+    assert r["next"] == "receipt", r
+    # uploading the same invoice again is caught as a duplicate
+    again = analyze(client, _upload(client, "1-acme-invoice.pdf").json()["request"])
+    assert again["policy"]["decision"] == "blocked"
+
+
+@pytest.mark.skipif(not os.path.isdir(SAMPLES), reason="sample invoices not present")
+def test_invoice_with_changed_payment_email_needs_review(client):
+    d = _upload(client, "2-acme-new-payment-email.pdf").json()
+    assert d["fields"]["vendor_email"] == "acme.payments@quickpay-transfer.example.com"
+    p = analyze(client, d["request"])
+    failed = {c["id"] for c in p["policy"]["checks"] if not c["passed"]}
+    assert "payee_email_changed" in failed and p["policy"]["decision"] == "review"
+
+
+@pytest.mark.skipif(not os.path.isdir(SAMPLES), reason="sample invoices not present")
+def test_invoice_hidden_instruction_blocked(client):
+    d = _upload(client, "3-hidden-instruction.pdf").json()
+    assert d["blocked"] and d["request"] is None and "ignore previous instructions" in d["injection"].lower()
+    assert audit.recent(1)[0]["event"] == "document.rejected"
+
+
+def test_invoice_upload_rejects_bad_files(client, monkeypatch):
+    assert _upload(client, "x.exe", b"MZ\x90\x00 not a pdf", "application/pdf").status_code == 422
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+    monkeypatch.setattr(config, "GROQ_API_KEY", "")
+    r = _upload(client, "photo.png", png, "image/png")
+    assert r.status_code == 422 and "PDF" in r.json()["detail"]
+    assert _upload(client, "big.png", png + b"\x00" * (4 * 1024 * 1024), "image/png").status_code == 422
+
+
+def test_invoice_ai_amount_must_be_on_the_page(client, monkeypatch):
+    from app.modules.documents import reader
+    text = "Bright Print Co\nInvoice number: BP-77\nTotal due: £60.00\n" + "filler line\n" * 3
+
+    async def fake_ai(_):
+        return {"vendor": "Bright Print Co", "vendor_email": "", "amount": "600.00", "currency": "GBP",
+                "invoice_number": "BP-77", "description": "flyers", "due_date": "", "hidden_instructions": ""}
+
+    monkeypatch.setattr(config, "GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(reader, "pdf_text", lambda data: (text, 1))
+    monkeypatch.setattr(reader, "groq_fields", fake_ai)
+    d = _upload(client, "x.pdf", b"%PDF-1.4 fake").json()
+    assert d["method"] == "ai" and d["fields"]["amount"] == ""
+    assert any("isn't on the invoice" in w for w in d["warnings"])

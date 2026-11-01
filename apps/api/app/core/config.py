@@ -18,6 +18,8 @@ PAYPAL_API_BASE = _env("PAYPAL_API_BASE", "https://api-m.sandbox.paypal.com").rs
 
 GROQ_API_KEY = _env("GROQ_API_KEY")
 GROQ_MODEL = _env("GROQ_MODEL", "openai/gpt-oss-20b")
+# Reads photos of invoices. PDFs use GROQ_MODEL on their text instead.
+VISION_MODEL = _env("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
 AI_TIMEOUT_SECONDS = float(_env("AI_TIMEOUT_SECONDS", "20"))
 
 FRONTEND_URL = _env("FRONTEND_URL", "http://localhost:3000").rstrip("/")

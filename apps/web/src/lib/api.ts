@@ -162,7 +162,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     r = await fetch(`${API_URL}${path}`, {
       ...init,
-      headers: init?.body ? { "Content-Type": "application/json" } : undefined,
+      headers: typeof init?.body === "string" ? { "Content-Type": "application/json" } : undefined,
       cache: "no-store",
     });
   } catch {
@@ -175,6 +175,28 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 const post = <T,>(path: string, body: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(body) });
 
+export interface InvoiceRead {
+  type: "pdf" | "jpeg" | "png" | "webp";
+  pages: number;
+  method: "ai" | "rules" | "vision";
+  model: string;
+  ms: number;
+  fields: {
+    vendor: string;
+    vendor_email: string;
+    amount: string;
+    currency: string;
+    invoice_number: string;
+    description: string;
+    due_date: string;
+  };
+  warnings: string[];
+  blocked: boolean;
+  injection: string | null;
+  request: string | null;
+  sha256: string;
+}
+
 export type ExecuteResult =
   | { next: "redirect"; order_id: string; approval_url: string; reused: boolean }
   | { next: "receipt"; transaction: Transaction }
@@ -182,6 +204,11 @@ export type ExecuteResult =
 
 export const api = {
   analyze: (message: string) => post<Proposal>("/agent/analyze", { message }),
+  readInvoice: (file: Blob, name: string) => {
+    const form = new FormData();
+    form.append("file", file, name);
+    return request<InvoiceRead>("/documents/read-invoice", { method: "POST", body: form });
+  },
   createOrder: (proposal_id: string, acknowledge_risks: boolean) =>
     post<{ order_id: string; approval_url: string; reused: boolean }>("/payments/create-order", {
       proposal_id,
