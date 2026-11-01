@@ -16,7 +16,7 @@ Built for the PayPal + AI Hackathon, using the PayPal Sandbox.
 | | |
 |---|---|
 | PayPal sandbox buyer (for Checkout) | `sb-lnkwi53636335@personal.example.com` |
-| Password | `paypilotjudge` |
+| Password | `PayPilotJudge2026!` |
 
 Sandbox only: no real money moves. These credentials are for PayPal's sandbox login page.
 
