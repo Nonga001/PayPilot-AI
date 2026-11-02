@@ -18,8 +18,8 @@ import { API_URL, api as payPilot, type InsightsData } from "@/lib/api";
 import { openaiAdapter } from "./openai-adapter";
 
 const PROMPT_STARTERS: AgAiPromptStarter[] = [
-  { label: "Why were payments blocked?", prompt: "Why were payments blocked, and which checks fire most often?" },
-  { label: "Is the audit trail intact?", prompt: "Is the audit trail intact? Verify it." },
+  { label: "Why were payments blocked?", prompt: "Ask the Risk analyst: why were payments blocked, and which safety checks fire most often?" },
+  { label: "Is the audit trail intact?", prompt: "Ask the Risk analyst to verify the audit trail." },
   { label: "Chart paid out by supplier", prompt: "Add a chart of the amount paid to each supplier, largest first." },
   { label: "Summarise this page", prompt: "Summarise what this page shows and what stands out." },
 ];
@@ -148,9 +148,14 @@ export function buildAi(models: string[], getData: () => InsightsData | null): A
           (baseLead.tools?.(ctx, params) ?? []).map((t) =>
             t.name === "delegate_to" ? ctx.tools.delegateTo([...DELEGATES, "risk"]) : t,
           ),
+        // Routing rule first, so it isn't buried under Studio's long default prompt. Safety questions go
+        // to the Risk analyst: it answers from PayPilot in one or two cheap calls, where the Data agent
+        // would read the whole schema first.
         instructions: (ctx, params) =>
-          `${baseLead.instructions?.(ctx, params) ?? ""}\n\nThis dashboard belongs to PayPilot, an AI payment agent. ` +
-          `Delegate questions about blocked or flagged payments, fraud, safety checks or the audit trail to the "risk" agent.`,
+          `ROUTING RULE (highest priority): this dashboard belongs to PayPilot, an AI payment agent. Any question about ` +
+          `blocked, flagged or stopped payments, why something was blocked, which checks fire, fraud or scams, risk, or the ` +
+          `audit trail MUST be delegated to the "risk" agent, never to "data". Pass the user's question through as the task. ` +
+          `Use "data" only for other data questions.\n\n${baseLead.instructions?.(ctx, params) ?? ""}`,
       });
       return {
         agents: [lead, ...DELEGATES.map((id) => directLlmRunner({ ...builtIn[id], adapter })), risk],

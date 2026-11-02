@@ -31,8 +31,8 @@ GROQ_RESPONSES_URL = "https://api.groq.com/openai/v1/responses"
 UNSUPPORTED = ("store", "include", "previous_response_id", "truncation", "safety_identifier",
                "prompt_cache_key", "prompt", "metadata", "user", "service_tier", "background")
 MAX_OUTPUT_TOKENS = 4000
-RETRIES = 3          # Groq's free plan allows 8K tokens/minute per model: wait out short 429s instead of failing
-MAX_WAIT_SECONDS = 12
+RETRIES = 5          # Groq's free plan allows 8K tokens/minute per model: wait out short 429s instead of failing
+MAX_WAIT_SECONDS = 20
 MAX_BODY_BYTES = 400_000
 RATE = (40, 60)  # requests per window (seconds) per visitor: a public demo spends your Groq quota
 _hits: dict[str, deque] = defaultdict(deque)
