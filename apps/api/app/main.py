@@ -44,4 +44,5 @@ app.include_router(insights_router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "paypilot-api", "version": app.version}
+    return {"status": "ok", "service": "paypilot-api", "version": app.version,
+            "ai_model": config.GROQ_MODEL if config.GROQ_API_KEY else None}
