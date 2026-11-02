@@ -503,7 +503,8 @@ def test_insights_live_and_sample(client, monkeypatch):
 
     both = client.get("/insights").json()
     sample = [r for r in both["tables"]["requests"] if r["source"] == "Sample"]
-    assert len(sample) > 50 and {r["decision"] for r in sample} >= {"Approved", "Review", "Blocked"}
+    assert len(sample) <= 10 and {r["decision"] for r in sample} == {"Approved", "Review", "Blocked", "Answered"}
+    assert len({c["check"] for c in both["tables"]["checks"] if c["source"] == "Sample"}) == 5  # one per check
     # every failed check points at a request that exists
     ids = {r["id"] for r in both["tables"]["requests"]}
     assert all(c["request_id"] in ids for c in both["tables"]["checks"])
@@ -542,6 +543,20 @@ def test_studio_ai_proxy(client, monkeypatch):
     assert r.status_code == 200 and b"response.completed" in r.content
     b = sent["body"]
     assert sent["url"].startswith("https://api.groq.com/") and sent["auth"] == "Bearer gsk-test"
-    assert b["model"] == config.STUDIO_AI_MODEL and b["max_output_tokens"] == ins.MAX_OUTPUT_TOKENS
+    assert b["model"] == config.STUDIO_AI_MODEL and b["max_output_tokens"] == ins.MAX_OUTPUT_TOKENS  # unknown model pinned
+    assert ins.clean_body({"model": config.STUDIO_AI_MODELS[-1]})["model"] == config.STUDIO_AI_MODELS[-1]  # allowed one kept
+
+    # a short "tokens per minute" 429 is waited out and retried
+    calls = []
+
+    class Busy(Up):
+        ok, status_code, headers = False, 429, {"retry-after": "0.01"}
+
+    def flaky(url, json, **kw):
+        calls.append(1)
+        return Busy() if len(calls) < 3 else Up()
+
+    monkeypatch.setattr(ins.requests, "post", flaky)
+    assert client.post("/insights/ai/responses", json={"input": []}).status_code == 200 and len(calls) == 3
     assert "store" not in b and "include" not in b and "parallel_tool_calls" not in b
     assert b["input"] == [{"role": "user", "content": "hi"}] and "strict" not in b["tools"][0]

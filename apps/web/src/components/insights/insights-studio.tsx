@@ -17,20 +17,20 @@ import { payPilotWidgets } from "./widgets";
 export function InsightsStudio({
   data,
   mode,
-  aiModel,
+  aiModels,
   pageId,
   onApi,
 }: {
   data: InsightsData;
   mode: AgStudioMode;
-  aiModel: string | null;
+  aiModels: string[] | null;
   pageId: string;
   onApi: (api: AgStudioApi) => void;
 }) {
   const studioData = useMemo(() => buildStudioData(data), [data]);
   // Read once when Studio is created, like the report state.
   // The page remounts Studio when the data changes, so the assistant can close over this data.
-  const ai = useMemo(() => (aiModel ? buildAi(aiModel, () => data) : undefined), [aiModel, data]);
+  const ai = useMemo(() => (aiModels?.length ? buildAi(aiModels, () => data) : undefined), [aiModels, data]);
   const initialState = useMemo(() => ({ ...insightsReport, selectedPageId: pageId }), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (

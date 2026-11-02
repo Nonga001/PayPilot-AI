@@ -232,7 +232,7 @@ export const api = {
     post<{ transaction?: Transaction; invoice?: Invoice }>(`/payments/refresh/${encodeURIComponent(key)}`, {}),
   dashboard: () => request<Dashboard>("/dashboard"),
   insights: (sample: boolean) => request<InsightsData>(`/insights?sample=${sample}`),
-  insightsAi: () => request<{ enabled: boolean; model: string }>("/insights/ai/status"),
+  insightsAi: () => request<{ enabled: boolean; model: string; models?: string[] }>("/insights/ai/status"),
   auditVerify: () => request<{ valid: boolean; count: number; broken_at: number | null; head: string }>("/audit/verify"),
   transactions: (limit = 500) => request<{ transactions: Transaction[] }>(`/transactions?limit=${limit}`),
   invoices: () => request<{ invoices: Invoice[] }>("/invoices?limit=500"),

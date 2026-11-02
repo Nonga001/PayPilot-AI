@@ -53,7 +53,7 @@ function riskTools(studio: AgStudioApi, getData: () => InsightsData | null): AgA
     description:
       "Count blocked and flagged requests by the safety check that stopped them, with up to 3 example requests per check " +
       "(id, payee, amount, date, Live or Sample). Use for 'why was this blocked', 'what risks do we see', fraud questions.",
-    params: (s) => s.object({ only_live: s.boolean({ description: "true to ignore the generated sample history" }) }),
+    params: (s) => s.object({ only_live: s.boolean({ description: "true to ignore the labelled Sample examples" }) }),
     execute: async (args, ctx) => {
       const d = getData();
       if (!d) return ctx.error("The dashboard data isn't loaded yet.");
@@ -113,11 +113,16 @@ PayPilot reads a request, deterministic rules approve, flag or block it, a human
 Answer questions about safety: why requests were blocked or flagged, which checks fire, risky payees, fraud signs
 (a known supplier asking to be paid at a new email is a common invoice scam; hidden instructions in a request or an
 uploaded invoice are prompt injection), and whether the audit trail is intact.
-Use your tools for facts; never guess numbers. Say whether figures include the generated Sample history or only Live data.
+Use your tools for facts; never guess numbers. Say whether figures include the labelled Sample examples or only Live data.
 Be brief and plain: a short answer, then at most 4 bullet points. When you are done, call complete_task with your answer.`;
 
-export function buildAi(model: string, getData: () => InsightsData | null): AgAiHarnessSetup {
-  const adapter = openaiAdapter({ endpoint: `${API_URL}/insights/ai`, model });
+// Groq's free plan limits tokens per minute per model, and one question is several model calls (the
+// lead, then the agent it hands work to). So the lead runs on the first model and every agent it
+// delegates to on the second: two separate budgets.
+export function buildAi(models: string[], getData: () => InsightsData | null): AgAiHarnessSetup {
+  const endpoint = `${API_URL}/insights/ai`;
+  const leadAdapter = openaiAdapter({ endpoint, model: models[0] });
+  const adapter = openaiAdapter({ endpoint, model: models[1] ?? models[0] });
 
   return ({ api }) =>
     createAiHarness(api, ({ builtIn }) => {
@@ -137,7 +142,7 @@ export function buildAi(model: string, getData: () => InsightsData | null): AgAi
       const baseLead = builtIn.lead;
       const lead = directLlmRunner({
         ...baseLead,
-        adapter,
+        adapter: leadAdapter,
         // Same lead, with the Risk analyst added to the agents it can hand work to.
         tools: (ctx, params) =>
           (baseLead.tools?.(ctx, params) ?? []).map((t) =>

@@ -25,7 +25,9 @@ function Loading() {
 export default function InsightsPage() {
   const [sample, setSample] = useState(true);
   const [data, setData] = useState<InsightsData | null>(null);
-  const [aiModel, setAiModel] = useState<string | null | undefined>(undefined);
+  // undefined while checking; null when the API has no Groq key (the assistant is then hidden)
+  const [aiModels, setAiModels] = useState<string[] | null | undefined>(undefined);
+  const aiModel = aiModels === undefined ? undefined : (aiModels?.[0] ?? null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<AgStudioMode>("view");
   const [page, setPage] = useState("safety");
@@ -35,8 +37,8 @@ export default function InsightsPage() {
   useEffect(() => {
     api
       .insightsAi()
-      .then((s) => setAiModel(s.enabled ? s.model : null))
-      .catch(() => setAiModel(null));
+      .then((s) => setAiModels(s.enabled ? (s.models?.length ? s.models : [s.model]) : null))
+      .catch(() => setAiModels(null));
   }, []);
 
   useEffect(() => {
@@ -88,11 +90,11 @@ export default function InsightsPage() {
         <div className="flex flex-wrap items-center gap-2">
           <label
             className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-panel px-3 py-1.5 text-sm ring-1 ring-line"
-            title="Adds a generated 60-day history so the charts have something to show. Sample rows are labelled and never touch the ledger."
+            title="Adds one labelled example of each outcome (paid, flagged, blocked, invoiced, answered). Examples never touch the ledger."
           >
             <input type="checkbox" checked={sample} onChange={(e) => setSample(e.target.checked)} className="accent-[var(--color-ai)]" />
             <FlaskConical className="size-3.5 text-warn" aria-hidden />
-            Sample history
+            Examples
           </label>
           {aiModel && (
             <button
@@ -148,7 +150,7 @@ export default function InsightsPage() {
         </div>
         <p className="text-xs text-faint">
           {data
-            ? `${liveTotal} live ${liveTotal === 1 ? "request" : "requests"}${data.includes_sample ? " + sample history" : ""}`
+            ? `${liveTotal} live ${liveTotal === 1 ? "request" : "requests"}${data.includes_sample ? " + examples" : ""}`
             : ""}
           {aiModel ? (
             <span className="ml-2 inline-flex items-center gap-1 text-ai">
@@ -168,7 +170,7 @@ export default function InsightsPage() {
             key={`${key}-${sample}`}
             data={data}
             mode={mode}
-            aiModel={aiModel}
+            aiModels={aiModels ?? null}
             pageId={page}
             onApi={(a) => (studio.current = a)}
           />

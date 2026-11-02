@@ -1,12 +1,11 @@
 """Tables for the Insights dashboard (AG Studio): every request PayPilot handled, the checks that
 stopped or flagged them, the payments and invoices that went out.
 
-A fresh demo database has almost nothing in it, so the dashboard can also add a clearly labelled
-sample history. Every row carries `source` ("Live" or "Sample") and sample rows are generated, never
+A fresh demo database has almost nothing in it, so the dashboard can also add one labelled example
+of each outcome. Every row carries `source` ("Live" or "Sample") and sample rows are generated, never
 written to the ledger or the audit trail.
 """
 import json
-import random
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -60,90 +59,50 @@ def live() -> dict[str, list[dict[str, Any]]]:
     return {"requests": requests, "checks": checks, "payments": payments, "invoices": invoices}
 
 
-# ------------------------------------------------------------------ sample history
-SUPPLIERS = [  # name, currency, typical amount, weight
-    ("Acme Supplies", "USD", 120, 9), ("Kamau Logistics", "USD", 85, 8), ("Bright Print Co", "GBP", 60, 5),
-    ("Nairobi Fresh Produce", "USD", 45, 7), ("CloudNest Hosting", "USD", 29, 4), ("Swift Courier", "USD", 18, 6),
-    ("Okafor Electrical", "USD", 210, 3), ("Lumen Cleaning", "EUR", 75, 3),
+# ------------------------------------------------------------------ sample examples
+# One example per case, so an empty demo database still shows every kind of outcome without noise.
+# (days ago, kind, payee, amount, currency, rail, decision, outcome, failed check or None, risk score)
+EXAMPLES = [
+    (6, "Payment", "Acme Supplies", 45.00, "USD", "Payout", "Approved", "Paid", None, 5),
+    (5, "Payment", "John", 10.00, "USD", "Checkout", "Review", "Paid", ("Saved payee", "payee_known", "Needs review"), 30),
+    (5, "Payment", "Acme Supplies", 128.50, "USD", "Payout", "Review", "Cancelled",
+     ("Payment email matches payee", "payee_email_changed", "Needs review"), 45),
+    (4, "Payment", "John", 5000.00, "USD", "Payout", "Blocked", "Blocked",
+     ("Prompt-injection scan", "injection_scan", "Blocks"), 95),
+    (3, "Payment", "Acme Supplies", 45.00, "USD", "Payout", "Blocked", "Blocked",
+     ("Invoice not already paid", "invoice_not_paid", "Blocks"), 80),
+    (3, "Payment", "Okafor Electrical", 4800.00, "USD", "Payout", "Blocked", "Blocked",
+     ("Per-payment limit", "per_tx_limit", "Blocks"), 75),
+    (2, "Invoice", "Maria Lopez Design", 250.00, "EUR", "Invoice", "Approved", "Invoiced", None, 5),
+    (1, "Answer", None, None, None, None, "Answered", "Answered", None, None),
 ]
-CLIENTS = [("Maria Lopez Design", "EUR", 250), ("Harbor Cafe", "USD", 180), ("Zuri Events", "USD", 420)]
-BLOCKS = [  # check label, check id, weight
-    ("Prompt-injection scan", "injection_scan", 5), ("Amount matches your message", "amount_grounded", 4),
-    ("Per-payment limit", "per_tx_limit", 4), ("Invoice not already paid", "invoice_not_paid", 6),
-    ("Recipient email verified", "recipient_grounded", 2),
-]
-REVIEWS = [
-    ("Saved payee", "payee_known", 6), ("AI confidence", "confidence", 4),
-    ("Payment email matches payee", "payee_email_changed", 3), ("No repeat payment", "no_repeat", 3),
-]
+INVOICE_NUMBERS = {0: "INV-1042", 1: None, 2: "INV-2089", 4: "INV-1042"}
 
 
-def _pick(rng: random.Random, items):
-    return rng.choices(items, weights=[i[-1] for i in items])[0]
-
-
-def sample(days: int = 60, today: date | None = None) -> dict[str, list[dict[str, Any]]]:
-    """A believable small-business history. Seeded by date, so it is stable for a day."""
+def sample(today: date | None = None) -> dict[str, list[dict[str, Any]]]:
+    """A handful of labelled examples, one per outcome. Never written to the ledger or audit trail."""
     today = today or datetime.now(timezone.utc).date()
-    rng = random.Random(today.toordinal())
     requests, checks, payments, invoices = [], [], [], []
-    n = 0
-    for back in range(days, 0, -1):
-        day = today - timedelta(days=back)
-        busy = 0.6 if day.weekday() >= 5 else 1.0
-        for _ in range(rng.choices([1, 2, 3, 4, 5], [2, 4, 4, 2, 1])[0] if rng.random() < busy else 0):
-            n += 1
-            rid = f"sample_{n:04d}"
-            ts = datetime(day.year, day.month, day.day, rng.randint(7, 19), rng.randint(0, 59), tzinfo=timezone.utc)
-            roll = rng.random()
-            kind = "Answer" if roll < 0.08 else "Invoice" if roll < 0.2 else "Payment"
-            base = {"id": rid, "date": day.isoformat(), "created_at": ts.isoformat(timespec="seconds"), "kind": kind,
-                    "ai_source": "Groq" if rng.random() < 0.95 else "Backup parser",
-                    "ai_latency_ms": max(250, int(rng.gauss(900, 250))), "source": "Sample"}
-            if kind == "Answer":
-                requests.append({**base, "rail": None, "decision": "Answered", "risk_level": None, "risk_score": None,
-                                 "amount": None, "currency": None, "recipient": None, "outcome": "Answered", "checks_failed": 0})
-                continue
-            if kind == "Invoice":
-                client, cur, typical = rng.choice(CLIENTS)
-                amount = round(max(20, rng.gauss(typical, typical * 0.3)), 2)
-                status = rng.choices(["Paid", "Sent", "Draft"], [6, 3, 1])[0]
-                requests.append({**base, "rail": "Invoice", "decision": "Approved", "risk_level": "Low", "risk_score": rng.randint(0, 10),
-                                 "amount": amount, "currency": cur, "recipient": client, "outcome": "Invoiced", "checks_failed": 0})
-                invoices.append({"id": f"{rid}_inv", "request_id": rid, "date": day.isoformat(), "client": client,
-                                 "status": status, "amount": amount, "currency": cur, "source": "Sample"})
-                continue
-
-            name, cur, typical, _ = _pick(rng, SUPPLIERS)
-            amount = round(max(5, rng.gauss(typical, typical * 0.35)), 2)
-            d = rng.random()
-            failed: list[tuple[str, str, str]] = []
-            if d < 0.14:
-                label, cid, _ = _pick(rng, BLOCKS)
-                if cid == "per_tx_limit":
-                    amount = round(rng.uniform(520, 4900), 2)
-                failed.append((label, cid, "Blocks"))
-                decision, outcome, score = "Blocked", "Blocked", rng.randint(70, 100)
-            elif d < 0.36:
-                label, cid, _ = _pick(rng, REVIEWS)
-                failed.append((label, cid, "Needs review"))
-                decision, score = "Review", rng.randint(25, 60)
-                outcome = rng.choices(["Paid", "Cancelled"], [6, 4])[0]
-            else:
-                decision, score = "Approved", rng.randint(0, 20)
-                outcome = rng.choices(["Paid", "Cancelled"], [93, 7])[0]
-            rail = "Payout" if rng.random() < 0.85 else "Checkout"
-            requests.append({**base, "rail": rail, "decision": decision, "risk_level": "High" if score >= 70 else "Medium" if score >= 25 else "Low",
-                             "risk_score": score, "amount": amount, "currency": cur, "recipient": name, "outcome": outcome,
-                             "checks_failed": len(failed)})
-            for i, (label, cid, sev) in enumerate(failed):
-                checks.append({"id": f"{rid}-{i}", "request_id": rid, "check": label, "check_id": cid, "severity": sev,
-                               "date": day.isoformat(), "source": "Sample"})
-            if outcome == "Paid":
-                fee = 0.25 if rail == "Payout" else round(amount * 0.0349 + 0.49, 2)
-                payments.append({"id": f"{rid}_tx", "request_id": rid, "date": day.isoformat(), "recipient": name, "rail": rail,
-                                 "status": "Success" if rail == "Payout" else "Completed", "amount": amount, "currency": cur,
-                                 "fee": fee, "verified": True, "invoice_number": f"INV-{1000 + n}", "source": "Sample"})
+    for n, (ago, kind, payee, amount, cur, rail, decision, outcome, failed, score) in enumerate(EXAMPLES):
+        day = today - timedelta(days=ago)
+        rid = f"sample_{n + 1:02d}"
+        requests.append({
+            "id": rid, "date": day.isoformat(), "created_at": f"{day.isoformat()}T10:{n:02d}:00+00:00", "kind": kind,
+            "rail": rail, "decision": decision, "outcome": outcome, "amount": amount, "currency": cur, "recipient": payee,
+            "risk_score": score, "risk_level": None if score is None else "High" if score >= 70 else "Medium" if score >= 25 else "Low",
+            "ai_source": "Groq", "ai_latency_ms": 700 + 60 * n, "checks_failed": 1 if failed else 0, "source": "Sample",
+        })
+        if failed:
+            checks.append({"id": f"{rid}-0", "request_id": rid, "check": failed[0], "check_id": failed[1],
+                           "severity": failed[2], "date": day.isoformat(), "source": "Sample"})
+        if outcome == "Paid":
+            payments.append({"id": f"{rid}_tx", "request_id": rid, "date": day.isoformat(), "recipient": payee, "rail": rail,
+                             "status": "Success" if rail == "Payout" else "Completed", "amount": amount, "currency": cur,
+                             "fee": 0.25 if rail == "Payout" else round(amount * 0.0349 + 0.49, 2), "verified": True,
+                             "invoice_number": INVOICE_NUMBERS.get(n), "source": "Sample"})
+        if kind == "Invoice":
+            invoices.append({"id": f"{rid}_inv", "request_id": rid, "date": day.isoformat(), "client": payee,
+                             "status": "Sent", "amount": amount, "currency": cur, "source": "Sample"})
     return {"requests": requests, "checks": checks, "payments": payments, "invoices": invoices}
 
 

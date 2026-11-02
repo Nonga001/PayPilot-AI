@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import threading
 import time
@@ -5,6 +6,7 @@ from collections import defaultdict, deque
 
 import requests
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.core import config
@@ -28,7 +30,9 @@ def insights(sample: bool = Query(True, description="Add a generated, clearly la
 GROQ_RESPONSES_URL = "https://api.groq.com/openai/v1/responses"
 UNSUPPORTED = ("store", "include", "previous_response_id", "truncation", "safety_identifier",
                "prompt_cache_key", "prompt", "metadata", "user", "service_tier", "background")
-MAX_OUTPUT_TOKENS = 8000
+MAX_OUTPUT_TOKENS = 4000
+RETRIES = 3          # Groq's free plan allows 8K tokens/minute per model: wait out short 429s instead of failing
+MAX_WAIT_SECONDS = 12
 MAX_BODY_BYTES = 400_000
 RATE = (40, 60)  # requests per window (seconds) per visitor: a public demo spends your Groq quota
 _hits: dict[str, deque] = defaultdict(deque)
@@ -49,15 +53,16 @@ def _allow(key: str) -> bool:
 
 def clean_body(body: dict) -> dict:
     out = {k: v for k, v in body.items() if k not in UNSUPPORTED}
-    out["model"] = config.STUDIO_AI_MODEL
+    # The browser picks one of the allowed models per agent; anything else gets the default.
+    out["model"] = out.get("model") if out.get("model") in config.STUDIO_AI_MODELS else config.STUDIO_AI_MODEL
     out["max_output_tokens"] = min(int(out.get("max_output_tokens") or MAX_OUTPUT_TOKENS), MAX_OUTPUT_TOKENS)
     # Groq is stateless: replayed reasoning items can't be matched to a stored response, so drop them.
     if isinstance(out.get("input"), list):
         out["input"] = [i for i in out["input"] if not (isinstance(i, dict) and i.get("type") == "reasoning")]
-    if not str(config.STUDIO_AI_MODEL).startswith("openai/gpt-oss"):
+    if not str(out["model"]).startswith("openai/gpt-oss"):
         out.pop("reasoning", None)
-    elif isinstance(out.get("reasoning"), dict):
-        out["reasoning"] = {"effort": out["reasoning"].get("effort") if out["reasoning"].get("effort") in ("low", "medium", "high") else "medium"}
+    else:
+        out["reasoning"] = {"effort": "low"}  # dashboard work is tool calls, not deep thought: faster and fewer tokens
     for t in out.get("tools") or []:
         if isinstance(t, dict):
             t.pop("strict", None)
@@ -67,7 +72,7 @@ def clean_body(body: dict) -> dict:
 
 @router.get("/ai/status")
 def ai_status():
-    return {"enabled": bool(config.GROQ_API_KEY), "model": config.STUDIO_AI_MODEL}
+    return {"enabled": bool(config.GROQ_API_KEY), "model": config.STUDIO_AI_MODEL, "models": config.STUDIO_AI_MODELS}
 
 
 @router.post("/ai/responses")
@@ -85,14 +90,29 @@ async def ai_responses(request: Request):
     except (ValueError, TypeError) as e:
         raise HTTPException(400, "Request body must be JSON.") from e
 
-    try:
-        upstream = requests.post(
+    def post():
+        return requests.post(
             GROQ_RESPONSES_URL, json=body, stream=True, timeout=(10, 120),
             headers={"Authorization": f"Bearer {config.GROQ_API_KEY}", "Content-Type": "application/json"},
         )
-    except requests.RequestException as e:
-        log.warning("Groq responses call failed: %s", type(e).__name__)
-        return JSONResponse({"error": {"message": "Couldn't reach the AI. Try again."}}, 502)
+
+    for attempt in range(RETRIES + 1):
+        try:
+            upstream = await run_in_threadpool(post)  # keep the event loop free while Groq answers
+        except requests.RequestException as e:
+            log.warning("Groq responses call failed: %s", type(e).__name__)
+            return JSONResponse({"error": {"message": "Couldn't reach the AI. Try again."}}, 502)
+        if upstream.status_code != 429 or attempt == RETRIES:
+            break
+        try:
+            wait = float(upstream.headers.get("retry-after", "3"))
+        except ValueError:
+            wait = 3.0
+        upstream.close()
+        if wait > MAX_WAIT_SECONDS:
+            break
+        log.info("Groq rate limit on %s, retrying in %.1fs", body["model"], wait)
+        await asyncio.sleep(wait + 0.3)
 
     if not upstream.ok:
         try:
@@ -101,6 +121,8 @@ async def ai_responses(request: Request):
             err = {"error": {"message": f"AI error (HTTP {upstream.status_code})"}}
         upstream.close()
         log.warning("Groq responses %s: %s", upstream.status_code, str(err)[:300])
+        if upstream.status_code == 429:
+            err = {"error": {"message": "The free AI plan is busy (tokens per minute). Wait a minute and ask again."}}
         return JSONResponse(err, upstream.status_code)
 
     def relay():

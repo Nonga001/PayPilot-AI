@@ -20,8 +20,11 @@ GROQ_API_KEY = _env("GROQ_API_KEY")
 GROQ_MODEL = _env("GROQ_MODEL", "openai/gpt-oss-20b")
 # Reads photos of invoices. PDFs use GROQ_MODEL on their text instead.
 VISION_MODEL = _env("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
-# Runs the AG Studio assistant on the Insights page (needs strong tool calling).
-STUDIO_AI_MODEL = _env("GROQ_STUDIO_MODEL", "openai/gpt-oss-120b")
+# Run the AG Studio assistant on the Insights page (need strong tool calling). The first leads the
+# chat; the agents it hands work to use the second. Groq's limits are per model, so two models give
+# the assistant twice the tokens per minute on the free plan.
+STUDIO_AI_MODELS = [m.strip() for m in _env("GROQ_STUDIO_MODELS", "openai/gpt-oss-120b,openai/gpt-oss-20b").split(",") if m.strip()]
+STUDIO_AI_MODEL = STUDIO_AI_MODELS[0]
 AI_TIMEOUT_SECONDS = float(_env("AI_TIMEOUT_SECONDS", "20"))
 
 FRONTEND_URL = _env("FRONTEND_URL", "http://localhost:3000").rstrip("/")

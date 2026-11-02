@@ -27,7 +27,7 @@ Sandbox only: no real money moves. These credentials are for PayPal's sandbox lo
 4. **Invoice a client:** a real **PayPal Invoice** is created and sent.
 5. **Pay someone new:** *"Pay John $10 for lunch"* → approve → log in with the buyer account above → you return to a verified receipt (**PayPal Checkout**).
 6. **Upload an invoice:** under *Sample invoices*, click **Supplier invoice**. PayPilot reads the PDF and drafts the payment for you to send. **New payment email** shows the classic invoice scam being flagged, and **Hidden text in PDF** shows a white-text "ignore previous instructions" line being caught. You can also upload your own PDF, or a photo of an invoice.
-7. Open **Insights** (AG Studio). The *Safety* page shows what the rules stopped, flagged and paid, with two PayPilot widgets: a **safety funnel** that follows every filter, and a live **audit-trail** check. Click **Ask AI** and try *"Why were payments blocked?"*: Studio's lead agent hands the question to PayPilot's own **Risk analyst** agent, which re-verifies the audit chain on the server. Click **Edit** to build your own widgets. *Sample history* adds a labelled, generated 60-day history so the charts have something to show.
+7. Open **Insights** (AG Studio). The *Safety* page shows what the rules stopped, flagged and paid, with two PayPilot widgets: a **safety funnel** that follows every filter, and a live **audit-trail** check. Click **Ask AI** and try *"Why were payments blocked?"*: Studio's lead agent hands the question to PayPilot's own **Risk analyst** agent, which re-verifies the audit chain on the server. Click **Edit** to build your own widgets. *Examples* adds one labelled sample of each outcome (paid, flagged, blocked, invoiced, answered) so an empty demo still shows everything.
 8. Open **Ledger** (AG Grid) to sort and filter every payment and invoice, and open any receipt to see its audit trail.
 
 **Good to know**
@@ -94,8 +94,8 @@ hashes each event with the one before it, so editing history is detectable (`GET
 The Insights page embeds [AG Studio](https://www.ag-grid.com/studio/) on PayPilot's own data (`GET /insights`):
 requests, the checks that failed on them, payments and invoices, joined on one calendar.
 
-- **Three pages** (Safety, Payments, Agent) with date, data-source and currency filters, KPIs with sparklines,
-  stacked charts, a pivot of decision vs outcome and grids.
+- **Three focused pages** (Safety, Payments, Agent): KPIs, a chart and a grid each, a currency switch, and a pivot
+  of decision vs outcome. Edit mode or the AI adds anything else.
 - **Custom widgets** (`apps/web/src/components/insights/widgets.tsx`): the *Safety funnel* reads Studio's data
   engine, so it follows every filter; the *Audit trail* widget re-verifies the SHA-256 chain on the server.
   Both are in the add-widget menu under *PayPilot*, and the AI can place them.
