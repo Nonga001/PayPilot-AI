@@ -1,34 +1,13 @@
 "use client";
 
 import { Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
-import { API_URL } from "@/lib/api";
+import { useApiHealth } from "@/lib/health";
 
-// Which AI is reading requests, on every page. One /health call per visit, shared by all pages.
-let cached: Promise<string | null> | null = null;
-const loadModel = () =>
-  (cached ??= fetch(`${API_URL}/health`, { cache: "no-store" })
-    .then((r) => r.json())
-    .then((h: { ai_model?: string | null }) => h.ai_model ?? null)
-    .catch(() => {
-      cached = null; // API asleep or unreachable: try again on the next page
-      return null;
-    }));
-
+// Which AI is reading requests, on every page.
 export function ModelBadge({ model: given }: { model?: string }) {
-  const [loaded, setLoaded] = useState<string | null | undefined>(undefined);
-
-  useEffect(() => {
-    if (given) return;
-    let live = true;
-    loadModel().then((m) => live && setLoaded(m));
-    return () => {
-      live = false;
-    };
-  }, [given]);
-
-  const model = given ?? loaded;
-  if (model === undefined) return null;
+  const health = useApiHealth();
+  if (!given && health.status !== "ok") return null;
+  const model = given ?? health.model;
   const label = model ? model.replace("openai/", "") : "Backup parser";
   return (
     <span

@@ -2,6 +2,7 @@ import { FlaskConical } from "lucide-react";
 import Link from "next/link";
 import { ModelBadge } from "./model-badge";
 import { Nav } from "./nav";
+import { ServerStatus } from "./server-status";
 import { Logo } from "./ui";
 
 export function Shell({ children, model }: { children: React.ReactNode; model?: string }) {
@@ -22,6 +23,7 @@ export function Shell({ children, model }: { children: React.ReactNode; model?: 
           </span>
         </div>
       </header>
+      <ServerStatus />
       <main className="flex-1">{children}</main>
     </div>
   );
