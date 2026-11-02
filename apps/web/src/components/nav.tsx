@@ -1,12 +1,13 @@
 "use client";
 
-import { BookUser, Send, Table2 } from "lucide-react";
+import { BookUser, ChartNoAxesCombined, Send, Table2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const LINKS = [
   { href: "/", label: "Pay", icon: Send },
   { href: "/ledger", label: "Ledger", icon: Table2 },
+  { href: "/insights", label: "Insights", icon: ChartNoAxesCombined },
   { href: "/payees", label: "Payees", icon: BookUser },
 ];
 

@@ -20,6 +20,8 @@ GROQ_API_KEY = _env("GROQ_API_KEY")
 GROQ_MODEL = _env("GROQ_MODEL", "openai/gpt-oss-20b")
 # Reads photos of invoices. PDFs use GROQ_MODEL on their text instead.
 VISION_MODEL = _env("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
+# Runs the AG Studio assistant on the Insights page (needs strong tool calling).
+STUDIO_AI_MODEL = _env("GROQ_STUDIO_MODEL", "openai/gpt-oss-120b")
 AI_TIMEOUT_SECONDS = float(_env("AI_TIMEOUT_SECONDS", "20"))
 
 FRONTEND_URL = _env("FRONTEND_URL", "http://localhost:3000").rstrip("/")

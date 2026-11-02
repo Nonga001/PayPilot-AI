@@ -45,3 +45,6 @@ services:
         value: "22"
       - key: NEXT_PUBLIC_API_URL
         value: https://paypilot-api-i6vz.onrender.com
+      # AG Studio licence (Insights page). Baked in at build time, so redeploy the web service after setting it.
+      - key: NEXT_PUBLIC_AG_STUDIO_LICENSE
+        sync: false

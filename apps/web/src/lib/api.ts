@@ -197,6 +197,15 @@ export interface InvoiceRead {
   sha256: string;
 }
 
+export type InsightsRow = Record<string, string | number | boolean | null>;
+
+export interface InsightsData {
+  as_of: string;
+  includes_sample: boolean;
+  live_counts: Record<"requests" | "checks" | "payments" | "invoices", number>;
+  tables: Record<"requests" | "checks" | "payments" | "invoices", InsightsRow[]>;
+}
+
 export type ExecuteResult =
   | { next: "redirect"; order_id: string; approval_url: string; reused: boolean }
   | { next: "receipt"; transaction: Transaction }
@@ -222,6 +231,9 @@ export const api = {
   refresh: (key: string) =>
     post<{ transaction?: Transaction; invoice?: Invoice }>(`/payments/refresh/${encodeURIComponent(key)}`, {}),
   dashboard: () => request<Dashboard>("/dashboard"),
+  insights: (sample: boolean) => request<InsightsData>(`/insights?sample=${sample}`),
+  insightsAi: () => request<{ enabled: boolean; model: string }>("/insights/ai/status"),
+  auditVerify: () => request<{ valid: boolean; count: number; broken_at: number | null; head: string }>("/audit/verify"),
   transactions: (limit = 500) => request<{ transactions: Transaction[] }>(`/transactions?limit=${limit}`),
   invoices: () => request<{ invoices: Invoice[] }>("/invoices?limit=500"),
   payees: () => request<{ payees: Payee[] }>("/payees"),

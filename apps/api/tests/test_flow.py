@@ -486,3 +486,62 @@ def test_invoice_ai_amount_must_be_on_the_page(client, monkeypatch):
     d = _upload(client, "x.pdf", b"%PDF-1.4 fake").json()
     assert d["method"] == "ai" and d["fields"]["amount"] == ""
     assert any("isn't on the invoice" in w for w in d["warnings"])
+
+
+# ---------------------------------------------------------- insights (AG Studio)
+def test_insights_live_and_sample(client, monkeypatch):
+    plan_returns(monkeypatch, amount="47.00", currency="USD", recipient="Acme Supplies",
+                 description="packaging", invoice_number="INV-3001")
+    p = analyze(client, "Pay my supplier Acme Supplies $47 for packaging, invoice INV-3001")
+    assert client.post("/payments/execute", json={"proposal_id": p["id"], "acknowledge_risks": True}).status_code == 200
+
+    live = client.get("/insights?sample=false").json()
+    assert live["live_counts"]["requests"] >= 1 and not live["includes_sample"]
+    assert all(r["source"] == "Live" for r in live["tables"]["requests"])
+    paid = [t for t in live["tables"]["payments"] if t["invoice_number"] == "INV-3001"]
+    assert paid and paid[0]["amount"] == 47.0 and paid[0]["rail"] == "Payout"
+
+    both = client.get("/insights").json()
+    sample = [r for r in both["tables"]["requests"] if r["source"] == "Sample"]
+    assert len(sample) > 50 and {r["decision"] for r in sample} >= {"Approved", "Review", "Blocked"}
+    # every failed check points at a request that exists
+    ids = {r["id"] for r in both["tables"]["requests"]}
+    assert all(c["request_id"] in ids for c in both["tables"]["checks"])
+    # sample rows never reach the ledger
+    assert all(not t["id"].startswith("sample_") for t in client.get("/transactions").json()["transactions"])
+
+
+def test_studio_ai_proxy(client, monkeypatch):
+    from app.modules.insights import routes as ins
+
+    monkeypatch.setattr(config, "GROQ_API_KEY", "")
+    assert client.post("/insights/ai/responses", json={"input": []}).status_code == 503
+
+    sent = {}
+
+    class Up:
+        ok, status_code, headers = True, 200, {"Content-Type": "text/event-stream"}
+
+        def iter_content(self, chunk_size=None):
+            yield b'data: {"type":"response.completed"}\n\n'
+
+        def close(self):
+            pass
+
+    def fake_post(url, json, **kw):
+        sent.update(url=url, body=json, auth=kw["headers"]["Authorization"])
+        return Up()
+
+    monkeypatch.setattr(config, "GROQ_API_KEY", "gsk-test")
+    monkeypatch.setattr(ins.requests, "post", fake_post)
+    r = client.post("/insights/ai/responses", json={
+        "model": "gpt-5", "store": False, "include": ["x"], "max_output_tokens": 99999, "parallel_tool_calls": True,
+        "input": [{"type": "reasoning", "id": "rs_1"}, {"role": "user", "content": "hi"}],
+        "tools": [{"type": "function", "name": "t", "parameters": {}, "strict": True}],
+    })
+    assert r.status_code == 200 and b"response.completed" in r.content
+    b = sent["body"]
+    assert sent["url"].startswith("https://api.groq.com/") and sent["auth"] == "Bearer gsk-test"
+    assert b["model"] == config.STUDIO_AI_MODEL and b["max_output_tokens"] == ins.MAX_OUTPUT_TOKENS
+    assert "store" not in b and "include" not in b and "parallel_tool_calls" not in b
+    assert b["input"] == [{"role": "user", "content": "hi"}] and "strict" not in b["tools"][0]

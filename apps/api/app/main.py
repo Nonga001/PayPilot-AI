@@ -8,6 +8,7 @@ from app.modules.agent.routes import router as agent_router
 from app.modules.ai.routes import router as ai_router
 from app.modules.audit.routes import router as audit_router
 from app.modules.documents.routes import router as documents_router
+from app.modules.insights.routes import router as insights_router
 from app.modules.payees.routes import router as payees_router
 from app.modules.payments.routes import router as payments_router
 from app.modules.security.routes import router as security_router
@@ -38,6 +39,7 @@ app.include_router(audit_router)
 app.include_router(security_router)
 app.include_router(ai_router)
 app.include_router(documents_router)
+app.include_router(insights_router)
 
 
 @app.get("/health")

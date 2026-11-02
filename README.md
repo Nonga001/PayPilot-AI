@@ -27,7 +27,8 @@ Sandbox only: no real money moves. These credentials are for PayPal's sandbox lo
 4. **Invoice a client:** a real **PayPal Invoice** is created and sent.
 5. **Pay someone new:** *"Pay John $10 for lunch"* → approve → log in with the buyer account above → you return to a verified receipt (**PayPal Checkout**).
 6. **Upload an invoice:** under *Sample invoices*, click **Supplier invoice**. PayPilot reads the PDF and drafts the payment for you to send. **New payment email** shows the classic invoice scam being flagged, and **Hidden text in PDF** shows a white-text "ignore previous instructions" line being caught. You can also upload your own PDF, or a photo of an invoice.
-7. Open **Ledger** (AG Grid) to sort and filter every payment and invoice, and open any receipt to see its audit trail.
+7. Open **Insights** (AG Studio). The *Safety* page shows what the rules stopped, flagged and paid, with two PayPilot widgets: a **safety funnel** that follows every filter, and a live **audit-trail** check. Click **Ask AI** and try *"Why were payments blocked?"*: Studio's lead agent hands the question to PayPilot's own **Risk analyst** agent, which re-verifies the audit chain on the server. Click **Edit** to build your own widgets. *Sample history* adds a labelled, generated 60-day history so the charts have something to show.
+8. Open **Ledger** (AG Grid) to sort and filter every payment and invoice, and open any receipt to see its audit trail.
 
 **Good to know**
 - **First load can take ~50 seconds.** The free Render API sleeps when idle. Refresh once it wakes.
@@ -88,6 +89,24 @@ PayPal-Request-Id idempotency keys and an atomic "executing" state stop double p
 **The record**: transactions are written from PayPal's own responses, receipts are printable, and the audit log
 hashes each event with the one before it, so editing history is detectable (`GET /audit/verify`).
 
+## Insights: AG Studio
+
+The Insights page embeds [AG Studio](https://www.ag-grid.com/studio/) on PayPilot's own data (`GET /insights`):
+requests, the checks that failed on them, payments and invoices, joined on one calendar.
+
+- **Three pages** (Safety, Payments, Agent) with date, data-source and currency filters, KPIs with sparklines,
+  stacked charts, a pivot of decision vs outcome and grids.
+- **Custom widgets** (`apps/web/src/components/insights/widgets.tsx`): the *Safety funnel* reads Studio's data
+  engine, so it follows every filter; the *Audit trail* widget re-verifies the SHA-256 chain on the server.
+  Both are in the add-widget menu under *PayPilot*, and the AI can place them.
+- **Theme**: every Studio colour, font and radius points at the app's design tokens, and series colours line up
+  with decisions (approved green, blocked red, review amber).
+- **Studio Agent Framework** (`ai.ts`): Studio's built-in agents run on Groq, plus a custom **Risk analyst** agent with
+  three tools of its own: summarise blocked and flagged requests, open any live request's checklist and audit
+  events, and re-verify the audit chain. The lead agent delegates safety questions to it.
+- **Keys stay on the server**: the browser posts to `POST /insights/ai/responses`, which adds the Groq key, pins the
+  model, drops what Groq's Responses API doesn't support, caps output and rate-limits per visitor.
+
 ## PayPal APIs used
 
 - **Payouts** (`/v1/payments/payouts`) to pay suppliers from the business balance
@@ -121,7 +140,8 @@ payouts show as delivered rather than unclaimed.
 ## Deploy
 
 `render.yaml` deploys both services on Render (Dashboard → New → Blueprint). Enter `PAYPAL_CLIENT_ID`,
-`PAYPAL_CLIENT_SECRET` and `GROQ_API_KEY` when asked. On the free plan the SQLite file resets on redeploy.
+`PAYPAL_CLIENT_SECRET` and `GROQ_API_KEY` when asked, and optionally `NEXT_PUBLIC_AG_STUDIO_LICENSE` (an AG Studio
+licence key; without one, Studio shows a trial watermark). On the free plan the SQLite file resets on redeploy.
 
 ## Tests
 
@@ -129,14 +149,14 @@ payouts show as delivered rather than unclaimed.
 cd apps/api && pip install pytest httpx && python -m pytest -q
 ```
 
-They cover the agent tool loop (with a scripted Groq), the rule-based fallback, Payouts, Invoicing, Checkout,
+They cover invoice upload, the Insights data and AI proxy, the agent tool loop (with a scripted Groq), the rule-based fallback, Payouts, Invoicing, Checkout,
 policy bypass attempts, double-execution, duplicate detection, payee audit and database migration.
 
 ## Structure
 
 ```
-apps/api   FastAPI: agent, ai, security (policy), payments, transactions, payees, audit
-apps/web   Next.js 16 + Tailwind 4 + AG Grid + Lucide
+apps/api   FastAPI: agent, ai, security (policy), payments, transactions, payees, audit, documents, insights
+apps/web   Next.js 16 + Tailwind 4 + AG Grid + AG Studio + Lucide
 docs/      Submission write-up and demo script
 ```
 
