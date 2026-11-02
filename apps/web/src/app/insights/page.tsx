@@ -78,7 +78,7 @@ export default function InsightsPage() {
   const liveTotal = data ? data.live_counts.requests : 0;
 
   return (
-    <Shell model={aiModel ?? undefined}>
+    <Shell>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           <h1 className="font-display text-3xl font-semibold tracking-tight">Insights</h1>
