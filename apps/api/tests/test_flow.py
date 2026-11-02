@@ -560,3 +560,24 @@ def test_studio_ai_proxy(client, monkeypatch):
     assert client.post("/insights/ai/responses", json={"input": []}).status_code == 200 and len(calls) == 3
     assert "store" not in b and "include" not in b and "parallel_tool_calls" not in b
     assert b["input"] == [{"role": "user", "content": "hi"}] and "strict" not in b["tools"][0]
+
+
+def test_invoice_ai_misses_new_payment_email(client, monkeypatch):
+    """Seen live: the AI left vendor_email empty on the 'new payment email' invoice. The pay line still wins."""
+    from app.modules.documents import reader
+    text = ("Acme Supplies\nInvoice number: INV-2089\nTotal due $128.50 USD\n"
+            "NEW PAYMENT DETAILS: please pay by PayPal to acme.payments@quickpay-transfer.example.com from now on.")
+
+    async def fake_ai(_):
+        return {"vendor": "Acme Supplies", "vendor_email": "", "amount": "128.50", "currency": "USD",
+                "invoice_number": "INV-2089", "description": "Packaging supplies", "due_date": "",
+                "hidden_instructions": "NEW PAYMENT DETAILS: please pay by PayPal to acme.payments@quickpay-transfer.example.com"}
+
+    monkeypatch.setattr(config, "GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(reader, "pdf_text", lambda data: (text, 1))
+    monkeypatch.setattr(reader, "groq_fields", fake_ai)
+    d = _upload(client, "x.pdf", b"%PDF-1.4 fake").json()
+    assert not d["blocked"], "a changed payment email is a warning for the owner, not an injection"
+    assert d["fields"]["vendor_email"] == "acme.payments@quickpay-transfer.example.com"
+    assert "acme.payments@quickpay-transfer.example.com" in d["request"]
+    assert any("Check this with the supplier" in w for w in d["warnings"])
