@@ -108,7 +108,7 @@ export default function Home() {
               : 0;
 
   return (
-    <Shell>
+    <Shell model={dash?.environment.ai_model}>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-10">
         <div className="min-w-0 rounded-3xl bg-panel shadow-[0_1px_2px_rgba(20,32,51,0.06),0_16px_40px_-20px_rgba(20,32,51,0.25)] ring-1 ring-line">
           <div className="border-b border-line px-5 py-3.5 sm:px-8">

@@ -1,5 +1,3 @@
-import { noteApiAlive } from "./health";
-
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export type Decision = "approved" | "review" | "blocked";
@@ -170,7 +168,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     throw new Error(`Can't reach the PayPilot API at ${API_URL}. Is the backend running?`);
   }
-  noteApiAlive(); // it answered, so it's awake (the banner and model badge listen for this)
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(errorMessage(data, r.status));
   return data as T;
