@@ -18,7 +18,7 @@ import { API_URL, api as payPilot, type InsightsData } from "@/lib/api";
 import { openaiAdapter } from "./openai-adapter";
 
 const PROMPT_STARTERS: AgAiPromptStarter[] = [
-  { label: "Why were payments blocked?", prompt: "Ask the Risk analyst: why were payments blocked, and which safety checks fire most often?" },
+  { label: "Why were payments blocked?", prompt: "Ask the Risk analyst: why were payments blocked?" },
   { label: "Is the audit trail intact?", prompt: "Ask the Risk analyst to verify the audit trail." },
   { label: "Any scam warning signs?", prompt: "Ask the Risk analyst: do any requests show scam or fraud warning signs?" },
 ];
@@ -50,28 +50,32 @@ function riskTools(studio: AgStudioApi, getData: () => InsightsData | null): AgA
   const blockedSummary = studio.defineAiTool({
     name: "summarise_blocked_and_flagged",
     description:
-      "Count blocked and flagged requests by the safety check that stopped them, with up to 3 example requests per check " +
-      "(id, payee, amount, date, Live or Sample). Use for 'why was this blocked', 'what risks do we see', fraud questions.",
+      "Why requests were blocked or flagged: each safety check that fired, how often, and one example. " +
+      "Use for 'why were payments blocked', 'which checks fire', risk and fraud questions.",
     params: (s) => s.object({ only_live: s.boolean({ description: "true to ignore the labelled Sample examples" }) }),
     execute: async (args, ctx) => {
       const d = getData();
       if (!d) return ctx.error("The dashboard data isn't loaded yet.");
       const live = (args as { only_live?: boolean }).only_live;
       const reqs = new Map(d.tables.requests.map((r) => [r.id as string, r]));
-      const byCheck = new Map<string, { severity: string; count: number; examples: unknown[] }>();
+      const byCheck = new Map<string, { severity: string; count: number; example: string }>();
       for (const c of d.tables.checks) {
         if (live && c.source !== "Live") continue;
         const key = String(c.check);
-        const entry = byCheck.get(key) ?? { severity: String(c.severity), count: 0, examples: [] };
-        entry.count += 1;
         const r = reqs.get(c.request_id as string);
-        if (r && entry.examples.length < 3) {
-          entry.examples.push({ id: r.id, payee: r.recipient, amount: r.amount, currency: r.currency, date: r.date, data: r.source });
-        }
+        const entry = byCheck.get(key) ?? {
+          severity: String(c.severity),
+          count: 0,
+          example: r ? `${r.recipient ?? "?"} ${r.amount ?? ""} ${r.currency ?? ""} (${r.source})`.replace(/\s+/g, " ") : "",
+        };
+        entry.count += 1;
         byCheck.set(key, entry);
       }
-      const rows = [...byCheck.entries()].map(([check, v]) => ({ check, ...v })).sort((a, b) => b.count - a.count);
-      return ctx.success(rows.length ? JSON.stringify(rows) : "No blocked or flagged requests in this data.", rows);
+      // Plain short lines, not JSON: the free AI plan counts every token sent back to the model.
+      const lines = [...byCheck.entries()]
+        .sort((a, b) => b[1].count - a[1].count)
+        .map(([check, v]) => `${v.severity === "Blocks" ? "BLOCKED" : "FLAGGED"} by "${check}": ${v.count}x, e.g. ${v.example}`);
+      return ctx.success(lines.length ? lines.join("\n") : "No blocked or flagged requests in this data.");
     },
   });
 
@@ -97,7 +101,7 @@ function riskTools(studio: AgStudioApi, getData: () => InsightsData | null): AgA
           agent_steps: (p.agent?.steps ?? []).map((s: { label: string; summary: string }) => `${s.label}: ${s.summary}`),
           audit: (p.audit ?? []).map((e: { event: string; ts: string }) => `${e.ts} ${e.event}`),
         };
-        return ctx.success(JSON.stringify(out), out);
+        return ctx.success(JSON.stringify(out));
       } catch (e) {
         return ctx.error(`Couldn't reach PayPilot: ${(e as Error).message}`);
       }

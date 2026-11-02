@@ -1,7 +1,7 @@
 "use client";
 
 import type { AgStudioApi, AgStudioMode } from "ag-studio";
-import { FlaskConical, Loader2, PencilRuler, RotateCcw, Sparkles } from "lucide-react";
+import { FlaskConical, Loader2, PencilRuler, RotateCcw, Sparkles, Timer } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { PAGE_TITLES } from "@/components/insights/report";
@@ -30,6 +30,7 @@ export default function InsightsPage() {
   const aiModel = aiModels === undefined ? undefined : (aiModels?.[0] ?? null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<AgStudioMode>("view");
+  const [open, setOpen] = useState<"none" | "ai" | "edit">("none");
   const [page, setPage] = useState("safety");
   const [key, setKey] = useState(0);
   const studio = useRef<AgStudioApi | null>(null);
@@ -52,9 +53,11 @@ export default function InsightsPage() {
     };
   }, [sample, key]);
 
-  // Studio shows its AI chat and editing panels in edit mode. "Ask AI" opens only the chat, so the
-  // dashboard keeps most of the width; "Edit" opens everything.
+  // AG Studio only shows its AI chat in edit mode (view mode offers just the filters panel). So "Ask AI"
+  // switches to edit mode with only the chat open, and the buttons say what's open rather than "editing":
+  //   none: view mode   ai: chat only ("Close AI")   edit: chat + widget and data panels ("Done editing")
   function openPanels(which: "ai" | "edit") {
+    setOpen(which);
     setMode("edit");
     const closed = which === "ai";
     // Studio applies the mode change on its next render, then lays out the panels; set them after that.
@@ -67,6 +70,11 @@ export default function InsightsPage() {
         panels: { ...st.panels, ai: { collapsed: false }, edit: { collapsed: closed }, data: { collapsed: closed } },
       });
     }, 60);
+  }
+
+  function closePanels() {
+    setOpen("none");
+    setMode("view");
   }
 
   function goTo(id: string) {
@@ -99,29 +107,32 @@ export default function InsightsPage() {
           {aiModel && (
             <button
               type="button"
-              onClick={() => openPanels("ai")}
-              className="inline-flex items-center gap-1.5 rounded-full bg-ai px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-[#087a97]"
+              onClick={() => (open === "ai" ? closePanels() : openPanels("ai"))}
+              aria-pressed={open === "ai"}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+                open === "ai" ? "bg-ink text-white" : "bg-ai text-white hover:bg-[#087a97]"
+              }`}
             >
               <Sparkles className="size-3.5" aria-hidden />
-              Ask AI
+              {open === "ai" ? "Close AI" : "Ask AI"}
             </button>
           )}
           <button
             type="button"
-            onClick={() => (mode === "edit" ? setMode("view") : openPanels("edit"))}
+            onClick={() => (open === "edit" ? closePanels() : openPanels("edit"))}
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium ring-1 transition-colors ${
-              mode === "edit" ? "bg-ink text-white ring-ink" : "bg-panel text-muted ring-line hover:text-ink"
+              open === "edit" ? "bg-ink text-white ring-ink" : "bg-panel text-muted ring-line hover:text-ink"
             }`}
-            aria-pressed={mode === "edit"}
+            aria-pressed={open === "edit"}
           >
             <PencilRuler className="size-3.5" aria-hidden />
-            {mode === "edit" ? "Done editing" : "Edit"}
+            {open === "edit" ? "Done editing" : "Edit"}
           </button>
           <button
             type="button"
             onClick={() => {
               setKey((k) => k + 1);
-              setMode("view");
+              closePanels();
             }}
             className="inline-flex items-center gap-1.5 rounded-full bg-panel px-3 py-1.5 text-sm text-muted ring-1 ring-line hover:text-ink"
             title="Reload the data and the default layout"
@@ -157,13 +168,20 @@ export default function InsightsPage() {
               <Sparkles className="size-3" aria-hidden /> Assistant on {aiModel.replace("openai/", "")}
             </span>
           ) : null}
-          {aiModel ? (
-            <span className="ml-2 hidden text-faint lg:inline">
-              · Best for safety questions; add charts with Edit
-            </span>
-          ) : null}
+
         </p>
       </div>
+
+      {aiModel && (
+        <p className="mt-3 flex items-start gap-2 rounded-xl bg-warn-soft px-3.5 py-2 text-[13px] text-warn">
+          <Timer className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          <span>
+            <span className="font-medium">Ask AI runs on a free AI plan.</span> Please wait about a minute between
+            questions so it doesn&apos;t run out. It&apos;s best at safety questions (why payments were blocked, the audit
+            trail, scam signs); add charts with Edit.
+          </span>
+        </p>
+      )}
 
       <div className="mt-3 h-[calc(100dvh-13rem)] min-h-[640px] overflow-hidden rounded-2xl ring-1 ring-line">
         {error ? (
