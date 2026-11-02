@@ -26,7 +26,7 @@ function Cancelled() {
       <p className="mt-2 text-[15px] text-muted">
         You stopped this payment on PayPal, so no money moved. The cancellation is in the audit trail.
       </p>
-      <Link href="/" className="mt-6 inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-white">
+      <Link href="/pay" className="mt-6 inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-white">
         Start a new payment
       </Link>
     </div>

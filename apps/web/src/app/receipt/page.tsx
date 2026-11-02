@@ -25,7 +25,7 @@ function ReceiptLoader() {
       <div className="mx-auto max-w-lg rounded-3xl bg-panel p-8 ring-1 ring-line">
         <h1 className="font-display text-2xl font-semibold">Receipt not found</h1>
         <p className="mt-2 text-[15px] text-muted">{error}</p>
-        <Link href="/" className="mt-6 inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-white">
+        <Link href="/pay" className="mt-6 inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-white">
           Back to PayPilot
         </Link>
       </div>

@@ -14,7 +14,7 @@ import {
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type InvoiceRead } from "@/lib/api";
 import { ACCEPT, InvoiceReadCard, SAMPLES } from "./invoice-upload";
 
@@ -74,6 +74,13 @@ export function Composer({
       setReading(false);
     }
   }
+
+  // The welcome card's "Try a scam invoice" button asks for a sample through this event.
+  useEffect(() => {
+    const onSample = (e: Event) => readSample((e as CustomEvent<string>).detail);
+    window.addEventListener("paypilot:sample", onSample);
+    return () => window.removeEventListener("paypilot:sample", onSample);
+  });
 
   async function readSample(file: string) {
     if (locked) return;

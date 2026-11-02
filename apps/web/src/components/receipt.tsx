@@ -40,7 +40,7 @@ export function Receipt({ data: initial, fresh = false }: { data: ReceiptData; f
   return (
     <div className="mx-auto w-full max-w-2xl">
       <div className="no-print mb-5 flex items-center justify-between">
-        <Link href="/" className="inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-ink">
+        <Link href="/pay" className="inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-ink">
           <ArrowLeft className="size-4" aria-hidden />
           Back to PayPilot
         </Link>

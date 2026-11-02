@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const LINKS = [
-  { href: "/", label: "Pay", icon: Send },
+  { href: "/pay", label: "Pay", icon: Send },
   { href: "/ledger", label: "Ledger", icon: Table2 },
   { href: "/insights", label: "Insights", icon: ChartNoAxesCombined },
   { href: "/payees", label: "Payees", icon: BookUser },
@@ -16,7 +16,7 @@ export function Nav() {
   return (
     <nav aria-label="Main" className="flex items-center gap-1 rounded-full bg-panel p-1 ring-1 ring-line">
       {LINKS.map(({ href, label, icon: Icon }) => {
-        const active = href === "/" ? path === "/" : path.startsWith(href);
+        const active = path.startsWith(href);
         return (
           <Link
             key={href}
