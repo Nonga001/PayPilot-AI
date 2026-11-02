@@ -121,8 +121,12 @@ async def ai_responses(request: Request):
             err = {"error": {"message": f"AI error (HTTP {upstream.status_code})"}}
         upstream.close()
         log.warning("Groq responses %s: %s", upstream.status_code, str(err)[:300])
-        if upstream.status_code == 429:
-            err = {"error": {"message": "The free AI plan is busy (tokens per minute). Wait a minute and ask again."}}
+        if upstream.status_code in (413, 429):
+            # Groq's free plan caps tokens per minute per model. Building widgets with Studio's agents re-sends
+            # the schema and report each step, which can outgrow that cap; safety questions stay small.
+            err = {"error": {"message": "This is more than the free AI plan allows per minute. Safety questions "
+                             "(why payments were blocked, is the audit trail intact) work best here; add charts "
+                             "with Edit. If it was a safety question, wait a minute and ask again."}}
         return JSONResponse(err, upstream.status_code)
 
     def relay():

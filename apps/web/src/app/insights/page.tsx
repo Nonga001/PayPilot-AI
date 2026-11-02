@@ -157,6 +157,11 @@ export default function InsightsPage() {
               <Sparkles className="size-3" aria-hidden /> Assistant on {aiModel.replace("openai/", "")}
             </span>
           ) : null}
+          {aiModel ? (
+            <span className="ml-2 hidden text-faint lg:inline">
+              · Best for safety questions; add charts with Edit
+            </span>
+          ) : null}
         </p>
       </div>
 

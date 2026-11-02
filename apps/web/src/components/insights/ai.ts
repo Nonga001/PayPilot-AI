@@ -20,8 +20,7 @@ import { openaiAdapter } from "./openai-adapter";
 const PROMPT_STARTERS: AgAiPromptStarter[] = [
   { label: "Why were payments blocked?", prompt: "Ask the Risk analyst: why were payments blocked, and which safety checks fire most often?" },
   { label: "Is the audit trail intact?", prompt: "Ask the Risk analyst to verify the audit trail." },
-  { label: "Chart paid out by supplier", prompt: "Add a chart of the amount paid to each supplier, largest first." },
-  { label: "Summarise this page", prompt: "Summarise what this page shows and what stands out." },
+  { label: "Any scam warning signs?", prompt: "Ask the Risk analyst: do any requests show scam or fraud warning signs?" },
 ];
 
 const DELEGATES: AgBuiltInAgentId[] = ["data", "page", "planning", "widget"];
