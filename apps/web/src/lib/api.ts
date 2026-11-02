@@ -142,6 +142,7 @@ export interface Dashboard {
   payees: number;
   audit: { valid: boolean; count: number; broken_at: number | null; head: string; events: AuditEvent[] };
   environment: { paypal: string; ai_model: string };
+  demo_payer: { email: string; password: string } | null;
 }
 
 export interface ReceiptData {
@@ -228,6 +229,8 @@ export const api = {
   cancel: (order_id: string) => post<{ proposal_id: string; status: string }>("/payments/cancel", { order_id }),
   execute: (proposal_id: string, acknowledge_risks: boolean) =>
     post<ExecuteResult>("/payments/execute", { proposal_id, acknowledge_risks }),
+  simulateInvoicePayment: (key: string) =>
+    post<{ invoice: Invoice }>(`/payments/simulate-invoice-payment/${encodeURIComponent(key)}`, {}),
   refresh: (key: string) =>
     post<{ transaction?: Transaction; invoice?: Invoice }>(`/payments/refresh/${encodeURIComponent(key)}`, {}),
   dashboard: () => request<Dashboard>("/dashboard"),

@@ -31,6 +31,9 @@ services:
         sync: false
       - key: DEMO_PAYEE_EMAIL
         sync: false
+      # That sandbox account's password, shown in the app so visitors can pay a demo invoice. Sandbox only.
+      - key: DEMO_PAYEE_PASSWORD
+        sync: false
 
   - type: web
     name: paypilot-web

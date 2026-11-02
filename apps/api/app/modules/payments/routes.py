@@ -280,6 +280,32 @@ def create_order(payload: CreateOrderRequest):
     return _start_checkout(p, payload.acknowledge_risks)
 
 
+@router.post("/simulate-invoice-payment/{key}")
+def simulate_invoice_payment(key: str):
+    """Demo helper, sandbox only: record the client's payment in PayPal so the invoice turns PAID without a login.
+    PayPal stores it as an external bank transfer; the audit trail says it was simulated."""
+    if "sandbox" not in config.PAYPAL_API_BASE:
+        raise HTTPException(403, "Simulated payments only work in the PayPal Sandbox.")
+    inv = store.get_invoice(key)
+    if not inv or not inv.get("paypal_invoice_id"):
+        raise HTTPException(404, "No PayPal invoice with that id")
+    if inv["status"] not in ("SENT", "UNPAID", "PARTIALLY_PAID"):
+        raise HTTPException(409, f"This invoice is {inv['status'].lower().replace('_', ' ')}, so there's nothing to pay.")
+    try:
+        rec = paypal().record_invoice_payment(
+            inv["paypal_invoice_id"], amount=inv["amount"], currency=inv["currency"], payment_date=db.today(),
+            note="Simulated client payment (PayPilot sandbox demo)",
+        )
+        status = paypal().get_invoice(inv["paypal_invoice_id"]).get("status")
+    except PayPalError as e:
+        raise _paypal_http(e, "invoice payment")
+    with db.write() as c:
+        audit.append(c, "invoice.payment_simulated", inv["proposal_id"],
+                     {"paypal_payment_id": rec.get("payment_id"), "amount": inv["amount"], "currency": inv["currency"]})
+    from .invoice_sync import update_invoice
+    return {"invoice": update_invoice(inv, status)}
+
+
 @router.post("/refresh/{key}")
 def refresh(key: str):
     """Re-read a payout's or invoice's status from PayPal (e.g. UNCLAIMED -> SUCCESS, SENT -> PAID)."""
@@ -300,12 +326,8 @@ def refresh(key: str):
             full = paypal().get_invoice(inv["paypal_invoice_id"])
         except PayPalError as e:
             raise _paypal_http(e, "invoice status")
-        status = full.get("status")
-        if status and status != inv["status"]:
-            with db.write() as c:
-                c.execute("UPDATE invoices SET status=?, updated_at=? WHERE id=?", (status, db.now_iso(), inv["id"]))
-                audit.append(c, "invoice.status_changed", inv["proposal_id"], {"from": inv["status"], "to": status})
-        return {"invoice": store.get_invoice(inv["id"])}
+        from .invoice_sync import update_invoice
+        return {"invoice": update_invoice(inv, full.get("status"))}
     raise HTTPException(404, "Nothing to refresh for that id")
 
 

@@ -75,6 +75,10 @@ class FakePayPal:
         self.invoices[iid]["status"] = "SENT"
         return {"href": f"https://www.sandbox.paypal.com/invoice/p/#{iid}"}
 
+    def record_invoice_payment(self, iid, *, amount, currency, payment_date, note):
+        self.invoices[iid]["status"] = "PAID"
+        return {"payment_id": f"EXTR-{iid}"}
+
     def get_invoice(self, iid):
         i = self.invoices[iid]
         return {"id": iid, "status": i["status"], "detail": {"invoice_number": i["number"], "metadata": {
@@ -581,3 +585,41 @@ def test_invoice_ai_misses_new_payment_email(client, monkeypatch):
     assert d["fields"]["vendor_email"] == "acme.payments@quickpay-transfer.example.com"
     assert "acme.payments@quickpay-transfer.example.com" in d["request"]
     assert any("Check this with the supplier" in w for w in d["warnings"])
+
+
+def test_paid_invoice_shows_as_paid(client, monkeypatch):
+    """The client pays on PayPal; the ledger picks it up without anyone pressing anything."""
+    from app.modules.payments import invoice_sync
+    plan_returns(monkeypatch, kind="invoice", amount="80.00", currency="USD", recipient="Harbor Cafe",
+                 recipient_email="owner@harborcafe.example.com", description="Catering")
+    p = analyze(client, "Invoice Harbor Cafe (owner@harborcafe.example.com) $80 for catering")
+    inv = client.post("/payments/execute", json={"proposal_id": p["id"]}).json()["invoice"]
+    client.fake.invoices[inv["paypal_invoice_id"]]["status"] = "PAID"   # the client pays on PayPal
+
+    monkeypatch.setattr(invoice_sync, "_last", 0.0)
+    rows = {i["id"]: i for i in client.get("/invoices").json()["invoices"]}
+    assert rows[inv["id"]]["status"] == "PAID"
+    assert any(e["event"] == "invoice.status_changed" and e["data"]["to"] == "PAID" for e in audit.recent(20))
+
+
+def test_dashboard_demo_payer(client, monkeypatch):
+    monkeypatch.setattr(config, "DEMO_PAYEE_EMAIL", "")
+    assert client.get("/dashboard").json()["demo_payer"] is None
+    monkeypatch.setattr(config, "DEMO_PAYEE_EMAIL", "sb-x@personal.example.com")
+    monkeypatch.setattr(config, "DEMO_PAYEE_PASSWORD", "sandbox-pass")
+    assert client.get("/dashboard").json()["demo_payer"] == {"email": "sb-x@personal.example.com", "password": "sandbox-pass"}
+
+
+def test_simulated_invoice_payment(client, monkeypatch):
+    plan_returns(monkeypatch, kind="invoice", amount="120.00", currency="USD", recipient="Zuri Events",
+                 recipient_email="pay@zuri.example.com", description="Event photos")
+    p = analyze(client, "Invoice Zuri Events (pay@zuri.example.com) $120 for event photos")
+    inv = client.post("/payments/execute", json={"proposal_id": p["id"]}).json()["invoice"]
+    r = client.post(f"/payments/simulate-invoice-payment/{inv['id']}")
+    assert r.status_code == 200 and r.json()["invoice"]["status"] == "PAID"
+    events = [e["event"] for e in audit.recent(10)]
+    assert "invoice.payment_simulated" in events and "invoice.status_changed" in events
+    # paying again is refused, and it never runs outside the sandbox
+    assert client.post(f"/payments/simulate-invoice-payment/{inv['id']}").status_code == 409
+    monkeypatch.setattr(config, "PAYPAL_API_BASE", "https://api-m.paypal.com")
+    assert client.post(f"/payments/simulate-invoice-payment/{inv['id']}").status_code == 403

@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.core import audit, db
 from app.modules.security.policy import LIMITS
+from app.modules.payments.invoice_sync import sync_open_invoices
 from app.modules.transactions import store
 
 router = APIRouter(tags=["payees"])
@@ -67,4 +68,5 @@ def remove_payee(payee_id: str):
 
 @router.get("/invoices")
 def list_invoices(limit: int = 100):
+    sync_open_invoices()  # pick up invoices the client has paid since we last looked
     return {"invoices": store.list_invoices(min(max(limit, 1), 500))}

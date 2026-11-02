@@ -170,6 +170,16 @@ class PayPalClient:
     def get_invoice(self, invoice_id: str) -> dict[str, Any]:
         return self._call("GET", f"/v2/invoicing/invoices/{invoice_id}")
 
+    def record_invoice_payment(self, invoice_id: str, *, amount: str, currency: str, payment_date: str,
+                               note: str) -> dict[str, Any]:
+        """Record a payment made outside PayPal (here: a simulated bank transfer). A full payment marks it PAID."""
+        return self._call("POST", f"/v2/invoicing/invoices/{invoice_id}/payments", {
+            "method": "BANK_TRANSFER",
+            "payment_date": payment_date,
+            "amount": {"currency_code": currency, "value": amount},
+            "note": note[:150],
+        }, request_id=f"pay-{invoice_id}")
+
 
 _client: PayPalClient | None = None
 _client_lock = threading.Lock()

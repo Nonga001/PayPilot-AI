@@ -56,6 +56,7 @@ const EVENT_LABELS: Record<string, string> = {
   "invoice.sent": "PayPal invoice sent",
   "invoice.failed": "Invoice failed",
   "invoice.status_changed": "Invoice status updated",
+  "invoice.payment_simulated": "Client payment simulated (sandbox)",
   "payee.added": "Payee added",
   "payee.updated": "Payee changed",
   "payee.removed": "Payee removed",

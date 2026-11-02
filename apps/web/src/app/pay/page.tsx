@@ -139,7 +139,7 @@ export default function PayPage() {
             {proposal && (
               <div ref={resultRef} className="scroll-mt-6 border-t border-line pt-9">
                 {sentInvoice ? (
-                  <InvoiceSent invoice={sentInvoice} onDone={reset} />
+                  <InvoiceSent invoice={sentInvoice} onDone={reset} demoPayer={dash?.demo_payer ?? null} />
                 ) : proposal.kind === "answer" ? (
                   <AnswerView proposal={proposal} onEdit={reset} />
                 ) : (

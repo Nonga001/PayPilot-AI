@@ -2,6 +2,7 @@ from fastapi import APIRouter, Query
 
 from app.core import audit, config
 from app.modules.security.policy import LIMITS, limits_view
+from app.modules.payments.invoice_sync import sync_open_invoices
 from app.modules.transactions import store
 
 router = APIRouter(tags=["audit"])
@@ -20,6 +21,7 @@ def audit_verify():
 @router.get("/dashboard")
 def dashboard():
     """Everything the home screen needs in one request."""
+    sync_open_invoices()
     spend = store.spend_by_currency_today()
     budgets = []
     for cur, (per_tx, per_day) in LIMITS.items():
@@ -39,6 +41,9 @@ def dashboard():
         "invoices": store.list_invoices(4),
         "payees": len(store.list_payees()),
         "audit": {**audit.verify(), "events": audit.recent(8)},
+        # A sandbox client account for paying demo invoices, shown next to "Open what your client sees".
+        "demo_payer": {"email": config.DEMO_PAYEE_EMAIL, "password": config.DEMO_PAYEE_PASSWORD}
+        if config.DEMO_PAYEE_EMAIL and config.DEMO_PAYEE_PASSWORD else None,
         "environment": {
             "paypal": "sandbox" if "sandbox" in config.PAYPAL_API_BASE else "live",
             "ai_model": config.GROQ_MODEL if config.GROQ_API_KEY else "rules (no GROQ_API_KEY)",
